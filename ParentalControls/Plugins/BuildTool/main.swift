@@ -26,8 +26,13 @@ struct BuildTool: CommandPlugin {
             return
         }
 
+        options.resolvedVersion = try resolveVersion(
+            options: options, packageDirectory: context.package.directoryURL
+        )
+
         Log.heading("Family Safety build")
         Log.detail("source", context.package.directoryURL.path)
+        Log.detail("version", options.resolvedVersion.description)
         Log.detail("mode", options.mode)
         Log.detail("artifacts", build.artifactsDirectory.path)
 
@@ -43,6 +48,9 @@ struct BuildTool: CommandPlugin {
             if options.notarize {
                 try await notarize(package, build: build, options: options)
             }
+            if options.publish {
+                try publishRelease(package, build: build, options: options)
+            }
         }
 
         Log.heading("Done")
@@ -55,6 +63,183 @@ struct BuildTool: CommandPlugin {
                 Pass --identity to sign with a Developer ID.
                 """)
         }
+    }
+
+    // MARK: - Version
+
+    /// Decides the version for this build and persists it to VERSION.
+    ///
+    /// Not bumped for a plain local build: iterating should not churn the file.
+    /// Always bumped when publishing, because two releases sharing a version
+    /// leave people unable to tell which build they have.
+    private func resolveVersion(options: Options, packageDirectory: URL) throws -> Version {
+        let current = try Version.current(in: packageDirectory)
+
+        if let explicit = options.explicitVersion {
+            guard let version = Version(explicit) else {
+                throw BuildError.usage("--version must look like 1.0.1 (got '\(explicit)').")
+            }
+            try version.write(to: packageDirectory)
+            return version
+        }
+
+        guard options.bumpVersion else { return current }
+
+        let next = current.nextPatch
+        try next.write(to: packageDirectory)
+        Log.detail("bumped", "\(current) -> \(next)")
+        return next
+    }
+
+    // MARK: - Publishing
+
+    /// Creates a GitHub release from the built package.
+    ///
+    /// Uses the `gh` CLI rather than the REST API directly: it already holds
+    /// the user's credentials, so the plugin never handles a token.
+    private func publishRelease(_ package: URL, build: BuildEnvironment, options: Options) throws {
+        let version = options.resolvedVersion
+        Log.step("Publishing \(version.tag) to \(options.repository)")
+
+        guard let gh = try? build.plugin.tool(named: "gh") else {
+            throw BuildError.step("""
+                The GitHub CLI (gh) was not found. Install it with `brew install gh` \
+                and authenticate with `gh auth login`.
+                """)
+        }
+
+        // Refuse rather than clobber: overwriting a published release changes
+        // what people already downloaded under that version.
+        let existing = try? build.run(
+            url: gh.url,
+            ["release", "view", version.tag, "--repo", options.repository],
+            describing: "checking for an existing release"
+        )
+        if existing != nil {
+            throw BuildError.step("""
+                \(version.tag) already exists in \(options.repository). \
+                Bump the version or delete the release first.
+                """)
+        }
+
+        // Checksums let people verify a download that macOS will not vouch for.
+        let checksums = try checksumFile(for: package, in: build)
+
+        let notes = try releaseNotes(options: options, in: build)
+        try build.run(url: gh.url, [
+            "release", "create", version.tag,
+            package.path,
+            checksums.path,
+            "--repo", options.repository,
+            "--title", "\(version.tag) — \(options.mode.capitalized) Mode installer",
+            "--notes-file", notes.path,
+        ], describing: "creating the release")
+
+        Log.detail("released", "https://github.com/\(options.repository)/releases/tag/\(version.tag)")
+    }
+
+    private func checksumFile(for package: URL, in build: BuildEnvironment) throws -> URL {
+        let output = try build.run(
+            "shasum", ["-a", "256", package.path],
+            describing: "computing the checksum"
+        )
+        // Rewrite the absolute path to a bare filename, which is what
+        // `shasum -c SHA256SUMS.txt` expects next to the downloaded file.
+        let digest = output.split(separator: " ").first.map(String.init) ?? ""
+        guard digest.count == 64 else {
+            throw BuildError.step("could not parse a SHA-256 digest from: \(output)")
+        }
+        let file = build.artifactsDirectory.appendingPathComponent("SHA256SUMS.txt")
+        try "\(digest)  \(package.lastPathComponent)\n"
+            .write(to: file, atomically: true, encoding: .utf8)
+        return file
+    }
+
+    /// Release notes, generated so they cannot drift from what was built.
+    private func releaseNotes(options: Options, in build: BuildEnvironment) throws -> URL {
+        let signed = options.installerIdentity != nil
+        let notarized = options.notarize
+
+        var text = """
+            ## \(options.mode.capitalized) Mode installer
+
+            Version \(options.resolvedVersion) · macOS 14 or later.
+
+            """
+
+        if notarized {
+            text += """
+
+                Download `Family-Safety.pkg` and double-click it.
+
+                """
+        } else {
+            // Being wrong about this once already cost a support round: the
+            // right-click trick works for .app bundles, not for .pkg files.
+            text += """
+
+                ### ⚠️ Not notarized — install from Terminal
+
+                macOS refuses to open an unsigned `.pkg` and offers no
+                click-through. Right-click → Open works for apps but **not** for
+                installer packages, and clearing the quarantine flag does not
+                help either — the missing signature is what Gatekeeper objects
+                to.
+
+                ```bash
+                shasum -a 256 ~/Downloads/Family-Safety.pkg   # compare with SHA256SUMS.txt
+                sudo installer -pkg ~/Downloads/Family-Safety.pkg -target /
+                ```
+
+                `/usr/sbin/installer` does not consult Gatekeeper. Alternatively
+                build from source — a locally built package is never quarantined:
+
+                ```bash
+                swift package --allow-writing-to-package-directory build-family-safety
+                sudo installer -pkg build/Family-Safety.pkg -target /
+                ```
+
+                """
+        }
+
+        text += """
+
+            ### What it installs
+
+            - **Family Safety Setup.app** into `/Applications` — the wizard,
+              with a preview mode and **Undo All Changes**
+            - Encrypted DNS filtering via Cloudflare for Families (`1.1.1.3`)
+            - Blocks social media and AI chatbots
+            - Forces Google SafeSearch and YouTube restricted mode
+            - Hardens Chrome, Brave, Edge, Vivaldi, Opera and Firefox
+            - Installs uBlock Origin Lite
+
+            ### One manual step
+
+            macOS does not let anything install a configuration profile
+            automatically. Open `/Users/Shared/Family-Safety.mobileconfig`, then
+            approve it in **System Settings › General › Device Management**.
+
+            ### Honest limitations
+
+            A phone hotspot bypasses all of this and no macOS setting can
+            prevent it. [BYPASS-NOTES.md](https://github.com/\(options.repository)/blob/main/docs/BYPASS-NOTES.md)
+            ranks every bypass by likelihood and says which have no fix.
+
+            """
+
+        if !signed {
+            text += """
+
+                _This build is ad-hoc signed. Notarized releases will install by
+                double-clicking._
+
+                """
+        }
+
+        let file = build.artifactsDirectory.appendingPathComponent("RELEASE_NOTES.md")
+        try text.write(to: file, atomically: true, encoding: .utf8)
+        return file
     }
 
     // MARK: - Steps
@@ -105,7 +290,7 @@ struct BuildTool: CommandPlugin {
         )
 
         let plist = app.appendingPathComponent("Contents/Info.plist")
-        try InfoPlist(version: options.version).data().write(to: plist)
+        try InfoPlist(version: options.resolvedVersion.description).data().write(to: plist)
 
         // A malformed Info.plist yields a bundle that silently will not launch.
         try build.run("plutil", ["-lint", plist.path], describing: "validating Info.plist")
@@ -168,13 +353,26 @@ struct BuildTool: CommandPlugin {
         try build.run("bash", ["-n", postinstall.path], describing: "checking script syntax")
 
         Log.step("Building installer package")
+
+        // The package installs the app as well as applying the configuration.
+        // Without it there is no way to verify what happened or to undo it, and
+        // an installer that cannot be reversed is one nobody should be asked to
+        // trust.
+        let payload = build.artifactsDirectory.appendingPathComponent("payload")
+        try? FileManager.default.removeItem(at: payload)
+        try FileManager.default.createDirectory(at: payload, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(
+            at: app, to: payload.appendingPathComponent(app.lastPathComponent)
+        )
+
         let output = build.artifactsDirectory.appendingPathComponent("\(BuildEnvironment.appName).pkg")
         try? FileManager.default.removeItem(at: output)
         try build.run("pkgbuild", [
-            "--nopayload",                      // runs a script; installs no files
+            "--root", payload.path,
+            "--install-location", "/Applications",
             "--scripts", scripts.path,
             "--identifier", BuildEnvironment.packageIdentifier,
-            "--version", options.version,
+            "--version", options.resolvedVersion.description,
             output.path,
         ], describing: "pkgbuild")
 

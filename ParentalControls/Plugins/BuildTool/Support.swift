@@ -34,7 +34,15 @@ enum BuildError: LocalizedError, CustomStringConvertible {
 /// trade for a dozen flags.
 struct Options {
     var mode = "family"
-    var version = "1.0"
+    /// Set explicitly with --version; otherwise taken from the VERSION file.
+    var explicitVersion: String?
+    /// Bump the patch number and persist it. Off for a plain local build, on
+    /// automatically when publishing so a release is never published twice
+    /// under the same version.
+    var bumpVersion = false
+    /// Create a GitHub release from the built artifacts.
+    var publish = false
+    var repository = "drdee/parental_controls"
     var appIdentity: String?
     var installerIdentity: String?
     var buildPackage = true
@@ -55,6 +63,9 @@ struct Options {
         return (appleID, teamID, notaryPassword)
     }
 
+    /// Resolved by the build; `--version` wins, else VERSION (optionally bumped).
+    var resolvedVersion = Version.initial
+
     static let usage = """
         USAGE: swift package build-family-safety [options]
 
@@ -63,7 +74,13 @@ struct Options {
         OPTIONS:
           --mode <family|advanced>   Which configuration the installer applies.
                                      Default: family (cannot lock anyone out).
-          --version <version>        Bundle and package version. Default: 1.0.
+          --version <x.y.z>          Build this version and write it to VERSION.
+          --bump                     Increment the patch number first.
+                                     Implied by --publish.
+          --publish                  Create a GitHub release from the build.
+                                     Always bumps the version.
+          --repo <owner/name>        Repository to publish to.
+                                     Default: drdee/parental_controls.
           --identity <name>          Developer ID Application identity for the
                                      app. Omit for an ad-hoc signature.
           --installer-identity <n>   Developer ID Installer identity for the pkg.
@@ -76,8 +93,12 @@ struct Options {
           --help
 
         EXAMPLES:
-          # Local build, ad-hoc signed
+          # Local build, ad-hoc signed, version unchanged
           swift package --allow-writing-to-package-directory build-family-safety
+
+          # Build and publish a new patch release to GitHub
+          swift package --allow-writing-to-package-directory \\
+            build-family-safety --publish
 
           # Release build for distribution
           swift package --allow-writing-to-package-directory build-family-safety \\
@@ -103,7 +124,10 @@ struct Options {
             remaining = remaining.dropFirst()
             switch argument {
             case "--mode":               mode = try value(for: argument)
-            case "--version":            version = try value(for: argument)
+            case "--version":            explicitVersion = try value(for: argument)
+            case "--bump":               bumpVersion = true
+            case "--publish":            publish = true
+            case "--repo":               repository = try value(for: argument)
             case "--identity":           appIdentity = try value(for: argument)
             case "--installer-identity": installerIdentity = try value(for: argument)
             case "--apple-id":           appleID = try value(for: argument)
@@ -119,6 +143,19 @@ struct Options {
 
         guard ["family", "advanced"].contains(mode) else {
             throw BuildError.usage("--mode must be 'family' or 'advanced' (got '\(mode)').")
+        }
+        if let explicitVersion, Version(explicitVersion) == nil {
+            throw BuildError.usage("--version must look like 1.0.1 (got '\(explicitVersion)').")
+        }
+        if publish {
+            // A release without the app in it would leave people unable to
+            // verify or undo what the installer did.
+            guard buildPackage else {
+                throw BuildError.usage("--publish needs the package; remove --skip-package.")
+            }
+            // Publishing the same version twice makes it impossible to tell
+            // which build someone has.
+            bumpVersion = explicitVersion == nil
         }
         if notarize, installerIdentity == nil {
             throw BuildError.usage("--notarize requires --installer-identity: Apple will not notarize an unsigned package.")
@@ -274,5 +311,70 @@ enum Log {
 
     static func warning(_ text: String) {
         print("\nwarning: \(text)")
+    }
+}
+
+// MARK: - Version
+
+/// The build version, tracked in a `VERSION` file at the package root.
+///
+/// A file rather than a git tag: the build has to work in a plain source
+/// download with no git history, and a tag would tie the version to whether
+/// the working tree happens to be tagged.
+struct Version: CustomStringConvertible, Equatable {
+    var major: Int
+    var minor: Int
+    var patch: Int
+
+    var description: String { "\(major).\(minor).\(patch)" }
+    /// Git tags conventionally carry a leading `v`.
+    var tag: String { "v\(description)" }
+
+    static let fileName = "VERSION"
+    static let initial = Version(major: 1, minor: 0, patch: 0)
+
+    init(major: Int, minor: Int, patch: Int) {
+        self.major = major
+        self.minor = minor
+        self.patch = patch
+    }
+
+    /// Parses `major.minor.patch`, tolerating a missing patch component.
+    init?(_ string: String) {
+        let parts = string
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: ".")
+            .map(String.init)
+        guard (2...3).contains(parts.count) else { return nil }
+        let numbers = parts.compactMap { Int($0) }
+        guard numbers.count == parts.count, numbers.allSatisfy({ $0 >= 0 }) else { return nil }
+        self.major = numbers[0]
+        self.minor = numbers[1]
+        self.patch = numbers.count == 3 ? numbers[2] : 0
+    }
+
+    var nextPatch: Version {
+        Version(major: major, minor: minor, patch: patch + 1)
+    }
+
+    static func url(in packageDirectory: URL) -> URL {
+        packageDirectory.appendingPathComponent(fileName)
+    }
+
+    /// Reads the current version, defaulting to 1.0.0 when the file is absent.
+    static func current(in packageDirectory: URL) throws -> Version {
+        guard let contents = try? String(contentsOf: url(in: packageDirectory), encoding: .utf8) else {
+            return initial
+        }
+        guard let version = Version(contents) else {
+            let shown = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw BuildError.step("\(fileName) does not contain a valid version: \(shown.debugDescription)")
+        }
+        return version
+    }
+
+    func write(to packageDirectory: URL) throws {
+        try (description + "\n")
+            .write(to: Self.url(in: packageDirectory), atomically: true, encoding: .utf8)
     }
 }
