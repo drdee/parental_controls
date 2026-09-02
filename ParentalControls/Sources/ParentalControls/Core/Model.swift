@@ -171,7 +171,12 @@ struct BlockedSite: Identifiable, Hashable, Sendable {
 extension BlockedSite {
     /// The sites the user named, with the subdomains I confirmed resolve
     /// independently (TikTok in particular serves from several).
-    static let defaults: [BlockedSite] = [
+    /// Social media, as one preset.
+    ///
+    /// On by default — these are the sites the whole exercise started from.
+    /// Grouped rather than listed individually because a parent thinks in terms
+    /// of "block social media", not in terms of nine hostnames.
+    static let socialMedia: [BlockedSite] = [
         BlockedSite("tiktok.com", extraHosts: [
             "m.tiktok.com", "vm.tiktok.com", "vt.tiktok.com", "api.tiktok.com",
         ]),
@@ -189,18 +194,23 @@ extension BlockedSite {
             "web.snapchat.com", "accounts.snapchat.com",
             "app.snapchat.com", "my.snapchat.com",
         ]),
-        BlockedSite("chatgpt.com", extraHosts: [
-            "chat.openai.com", "openai.com", "api.openai.com",
-        ]),
     ]
 
-    /// AI chatbots beyond ChatGPT.
+    /// The editable list starts empty: everything is now reached through the
+    /// presets, and anything a parent types is added on top of them.
+    static let defaults: [BlockedSite] = []
+
+    /// AI chatbots.
     ///
-    /// On by default: blocking only ChatGPT is now close to meaningless, and
-    /// these matter for both homework integrity and unfiltered content.
+    /// On by default. ChatGPT lives here rather than under social media — it is
+    /// a different category of concern (homework integrity and unfiltered
+    /// content), and blocking only ChatGPT is close to meaningless now.
     /// `gemini.google.com` is the one to watch — schools using Google
     /// Workspace may need it, so it can be removed individually.
     static let aiChatbots: [BlockedSite] = [
+        BlockedSite("chatgpt.com", extraHosts: [
+            "chat.openai.com", "openai.com", "api.openai.com",
+        ]),
         BlockedSite("claude.ai"),
         BlockedSite("perplexity.ai"),
         BlockedSite("character.ai", extraHosts: ["beta.character.ai"]),
@@ -211,12 +221,12 @@ extension BlockedSite {
         BlockedSite("copilot.microsoft.com"),
     ]
 
-    /// Chat, gaming and forum platforms.
+    /// Chat, gaming and forum platforms — distinct from `socialMedia`.
     ///
     /// Deliberately **off** by default. Discord and Reddit have real school and
     /// club uses, and blocking them tends to produce a workaround rather than a
     /// behaviour change — better as a conversation than a silent block.
-    static let socialAndGaming: [BlockedSite] = [
+    static let chatAndGaming: [BlockedSite] = [
         BlockedSite("discord.com", extraHosts: ["discordapp.com", "gateway.discord.gg"]),
         BlockedSite("reddit.com", extraHosts: ["old.reddit.com", "np.reddit.com"]),
         BlockedSite("roblox.com", extraHosts: ["web.roblox.com"]),

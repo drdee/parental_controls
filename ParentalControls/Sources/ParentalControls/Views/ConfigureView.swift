@@ -118,21 +118,55 @@ struct ConfigureView: View {
 
     private var presetsSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 10) {
-                Toggle("Block AI chatbots (\(BlockedSite.aiChatbots.count) sites)", isOn: $state.blockAIChatbots)
-                Text("Claude, Gemini, Perplexity, Character.AI, Copilot, DeepSeek, Grok, Poe. Blocking only ChatGPT achieves very little now.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 14) {
+                preset(
+                    "Block social media",
+                    isOn: $state.blockSocialMedia,
+                    sites: BlockedSite.socialMedia,
+                    detail: "TikTok, Instagram, Pinterest and Snapchat, including the mobile and link-shortener domains they redirect through."
+                )
 
-                Toggle("Block chat and gaming sites (\(BlockedSite.socialAndGaming.count) sites)", isOn: $state.blockSocialAndGaming)
-                Text("Discord, Reddit, Roblox, Twitch, Telegram, WhatsApp Web, X, Threads, Tumblr, BeReal. Off by default: Discord and Reddit have genuine school and club uses, and blocking them tends to produce a workaround rather than a change in behaviour.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                preset(
+                    "Block AI chatbots",
+                    isOn: $state.blockAIChatbots,
+                    sites: BlockedSite.aiChatbots,
+                    detail: "ChatGPT, Claude, Gemini, Perplexity, Character.AI, Copilot, DeepSeek, Grok and Poe. Blocking only ChatGPT achieves very little now."
+                )
+
+                preset(
+                    "Block chat and gaming sites",
+                    isOn: $state.blockChatAndGaming,
+                    sites: BlockedSite.chatAndGaming,
+                    detail: "Discord, Reddit, Roblox, Twitch, Telegram, WhatsApp Web, X, Threads, Tumblr and BeReal. Off by default: Discord and Reddit have genuine school and club uses, and blocking them tends to produce a workaround rather than a change in behaviour."
+                )
             }
         } header: {
             SectionHeader("Quick presets", systemImage: "square.stack.3d.up")
+        }
+    }
+
+    /// One preset checkbox with its site count and rationale.
+    private func preset(_ title: String,
+                        isOn: Binding<Bool>,
+                        sites: [BlockedSite],
+                        detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Toggle(isOn: isOn) {
+                HStack(spacing: 6) {
+                    Text(title)
+                    Text("\(sites.count) sites")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(.quaternary.opacity(0.5), in: .capsule)
+                }
+            }
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.leading, 20)
         }
     }
 
@@ -141,6 +175,12 @@ struct ConfigureView: View {
     private var blockedSitesSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
+                if state.blockedSites.isEmpty {
+                    Text("Anything you add here is blocked in addition to the categories above.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 ForEach(state.blockedSites) { site in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
@@ -172,7 +212,7 @@ struct ConfigureView: View {
                 }
             }
         } header: {
-            SectionHeader("Blocked sites", systemImage: "hand.raised")
+            SectionHeader("Additional sites", systemImage: "hand.raised")
         }
     }
 

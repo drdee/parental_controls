@@ -30,6 +30,27 @@ filtering), a hardcoded profile identifier (which would let generation and
 revert drift apart), and an unquoted path interpolated into a privileged script
 (which allowed a newline command injection).
 
+## Preset categories
+
+Blocking is grouped into checkboxes rather than a flat list, because a parent
+thinks in categories, not hostnames:
+
+| Preset | Default | Contents |
+|---|---|---|
+| Social media | **on** | TikTok, Instagram, Pinterest, Snapchat |
+| AI chatbots | **on** | ChatGPT, Claude, Gemini, Perplexity, Character.AI, Copilot, DeepSeek, Grok, Poe |
+| Chat and gaming | off | Discord, Reddit, Roblox, Twitch, Telegram, WhatsApp Web, X, Threads, Tumblr, BeReal |
+
+ChatGPT sits with the AI chatbots rather than social media — it is a different
+category of concern (homework integrity), and someone turning off social media
+probably does not mean to unblock it.
+
+Chat and gaming is off deliberately: Discord and Reddit have genuine school and
+club uses, and blocking them tends to produce a workaround rather than a change
+in behaviour.
+
+With the two defaults on, 46 hostnames are blocked.
+
 ## Undo
 
 The main screen has an **Undo All Changes** option, separate from the setup

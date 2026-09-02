@@ -7,7 +7,9 @@ minutes.
 
 - Points the Mac at a **filtering DNS service** that blocks adult content and
   malware, encrypted so it works on any Wi-Fi network.
-- Blocks **TikTok, Instagram, and ChatGPT** (you can edit the list).
+- Blocks **social media** (TikTok, Instagram, Pinterest, Snapchat) and **AI
+  chatbots** (ChatGPT, Claude, Gemini and others) with a checkbox each. Chat and
+  gaming sites are a third option, off by default. You can add your own sites too.
 - Locks **Chrome and Firefox settings** so they can't route around the filter.
 
 ## What it does NOT do

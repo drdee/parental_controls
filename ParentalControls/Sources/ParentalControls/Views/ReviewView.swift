@@ -104,7 +104,10 @@ struct ReviewView: View {
             VStack(alignment: .leading, spacing: 8) {
                 row("Mode", state.mode.title)
                 row("DNS", state.dnsBackend.displayName)
-                row("Blocked sites", "\(state.blockedSites.count) domains")
+                // Must reflect the presets, not just the editable list — that
+                // list is empty by default now, and reporting "0 domains"
+                // while blocking twelve would be actively misleading.
+                row("Blocked sites", blockedSummary)
                 if state.installWARP { row("WARP client", "Download and install") }
                 if state.mode == .advanced, state.createAccount {
                     row("New account", "\(state.accountUsername) (standard, non-admin)")
@@ -119,6 +122,21 @@ struct ReviewView: View {
         } header: {
             SectionHeader("Summary", systemImage: "list.bullet.rectangle")
         }
+    }
+
+    /// Which categories are on, plus any manually added sites.
+    private var blockedSummary: String {
+        var parts: [String] = []
+        if state.blockSocialMedia { parts.append("social media") }
+        if state.blockAIChatbots { parts.append("AI chatbots") }
+        if state.blockChatAndGaming { parts.append("chat and gaming") }
+        if !state.blockedSites.isEmpty { parts.append("\(state.blockedSites.count) added") }
+
+        let hostCount = state.effectiveBlockedSites.flatMap(\.allHosts).count
+        if parts.isEmpty {
+            return "None"
+        }
+        return parts.joined(separator: ", ") + " — \(hostCount) hostnames"
     }
 
     private func row(_ label: String, _ value: String) -> some View {

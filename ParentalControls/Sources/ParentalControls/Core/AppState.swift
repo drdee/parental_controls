@@ -36,8 +36,9 @@ final class AppState {
     /// presets are switched on.
     var effectiveBlockedSites: [BlockedSite] {
         var sites = blockedSites
+        if blockSocialMedia { sites += BlockedSite.socialMedia }
         if blockAIChatbots { sites += BlockedSite.aiChatbots }
-        if blockSocialAndGaming { sites += BlockedSite.socialAndGaming }
+        if blockChatAndGaming { sites += BlockedSite.chatAndGaming }
         return sites
     }
 
@@ -48,8 +49,9 @@ final class AppState {
     var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
     var forceSafeSearch = true
     var restrictAirDrop = true
+    var blockSocialMedia = true
     var blockAIChatbots = true
-    var blockSocialAndGaming = false
+    var blockChatAndGaming = false
 
     /// Walk the whole wizard and report what *would* change, touching nothing.
     ///
@@ -84,8 +86,8 @@ final class AppState {
                 return "An account named “\(raw)” already exists on this Mac."
             }
         }
-        if blockedSites.isEmpty && !useZeroTrust {
-            return "Add at least one site to block, or use Zero Trust with a social-media policy."
+        if effectiveBlockedSites.isEmpty && !useZeroTrust {
+            return "Turn on at least one category, add a site, or use Zero Trust with its own policy."
         }
         return nil
     }
