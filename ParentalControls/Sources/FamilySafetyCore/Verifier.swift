@@ -21,11 +21,13 @@ public struct Verification: Identifiable, Sendable {
 }
 
 public struct Verifier: Sendable {
-    public init(runner: PrivilegedRunner) {
+    public init(runner: any CommandRunning, fileSystem: any FileSystemReading = LiveFileSystem()) {
         self.runner = runner
+        self.fileSystem = fileSystem
     }
 
-    public var runner: PrivilegedRunner
+    public var runner: any CommandRunning
+    public var fileSystem: any FileSystemReading = LiveFileSystem()
 
     /// A domain Cloudflare's adult-content filter is known to block. Used only
     /// as a probe — comparing a filtered resolver against an unfiltered one is
@@ -60,7 +62,7 @@ public struct Verifier: Sendable {
     /// domains are missing, the payloads did not take effect.
     private func managedPreferencesPresent() -> Verification {
         let managed = "/Library/Managed Preferences"
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: managed)) ?? []
+        let names = fileSystem.directoryContents(atPath: managed)
         let wanted = ["com.google.Chrome.plist", "org.mozilla.firefox.plist",
                       "com.apple.applicationaccess.plist"]
         let found = wanted.filter { names.contains($0) }

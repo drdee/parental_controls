@@ -26,7 +26,19 @@ public struct StepResult: Identifiable, Sendable {
 @MainActor
 @Observable
 public final class AppState {
-    public init() {}
+    /// Injected so the destructive paths can be tested. Defaults to the real
+    /// implementations, so production callers construct `AppState()`.
+    private let injectedRunner: (any CommandRunning)?
+    private let fileSystem: any FileSystemReading
+    private let downloader: (any PackageDownloading)?
+
+    public init(runner: (any CommandRunning)? = nil,
+                fileSystem: any FileSystemReading = LiveFileSystem(),
+                downloader: (any PackageDownloading)? = nil) {
+        self.injectedRunner = runner
+        self.fileSystem = fileSystem
+        self.downloader = downloader
+    }
 
     // MARK: - Configuration
 
@@ -108,7 +120,9 @@ public final class AppState {
 
     // MARK: - Services
 
-    private var runner: PrivilegedRunner { PrivilegedRunner(dryRun: dryRun) }
+    private var runner: any CommandRunning {
+        injectedRunner ?? PrivilegedRunner(dryRun: dryRun)
+    }
 
     /// Plain-language description of every change, for the dry-run walkthrough.
     public var changePlan: ChangePlan {
@@ -236,7 +250,7 @@ public final class AppState {
     /// rather than only pointing DNS at it.
     private func warpStep() async {
         if dryRun {
-            let existing = await WARPInstaller(runner: runner).installedVersionAsync()
+            let existing = await WARPInstaller(runner: runner, fileSystem: fileSystem, downloader: downloader).installedVersionAsync()
             stepResults.append(StepResult(
                 title: "Cloudflare WARP",
                 succeeded: true,
@@ -303,15 +317,14 @@ public final class AppState {
 
     private func writeProfile(_ generator: ProfileGenerator) throws -> URL {
         let data = try generator.xmlData()
-        let directory = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
+        let directory = fileSystem.downloadsDirectory
         let url = directory.appendingPathComponent("Family-Safety.mobileconfig")
         try data.write(to: url)
         return url
     }
 
     private func installWARPClient() async {
-        let installer = WARPInstaller(runner: runner)
+        let installer = WARPInstaller(runner: runner, fileSystem: fileSystem, downloader: downloader)
         if let version = await installer.installedVersionAsync() {
             stepResults.append(StepResult(
                 title: "Cloudflare WARP",
@@ -322,7 +335,7 @@ public final class AppState {
         }
         do {
             warpProgress = 0
-            let package = try await installer.download { [weak self] fraction in
+            let package = try await installer.fetch { [weak self] fraction in
                 Task { @MainActor in self?.warpProgress = fraction }
             }
             try await installer.installAsync(package: package)
@@ -377,13 +390,13 @@ public final class AppState {
     public var detectedChanges: [String] = []
     public var isReverting = false
 
-    public var revertPlan: [String] { Reverter(runner: runner).plan() }
-    public var revertWillNotUndo: [String] { Reverter(runner: runner).willNotUndo() }
+    public var revertPlan: [String] { Reverter(runner: runner, fileSystem: fileSystem).plan() }
+    public var revertWillNotUndo: [String] { Reverter(runner: runner, fileSystem: fileSystem).willNotUndo() }
 
     /// Look for evidence this tool has been run, so the confirmation screen can
     /// say what is actually present rather than guessing.
     public func detectExistingChanges() async {
-        detectedChanges = await Reverter(runner: runner).detectApplied()
+        detectedChanges = await Reverter(runner: runner, fileSystem: fileSystem).detectApplied()
     }
 
     public func revertEverything() async {
@@ -391,7 +404,8 @@ public final class AppState {
         defer { isReverting = false }
         // Never honour dry-run here: reverting is the safe direction, and a
         // silent no-op would leave someone believing they had undone it.
-        let reverter = Reverter(runner: PrivilegedRunner(dryRun: false))
+        let reverter = Reverter(runner: injectedRunner ?? PrivilegedRunner(dryRun: false),
+                                fileSystem: fileSystem)
         revertResults = await reverter.revertAll()
         detectedChanges = await reverter.detectApplied()
         stage = .revertResults
@@ -404,7 +418,7 @@ public final class AppState {
             verifications = []
             return
         }
-        verifications = await Verifier(runner: runner)
+        verifications = await Verifier(runner: runner, fileSystem: fileSystem)
             .runAllAsync(backend: dnsBackend, blockedSites: effectiveBlockedSites)
     }
 }

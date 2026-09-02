@@ -26,11 +26,13 @@ public struct RevertResult: Identifiable, Sendable {
 /// partly configured (or configured by an older version) still works and
 /// reports honestly instead of erroring.
 public struct Reverter: Sendable {
-    public init(runner: PrivilegedRunner) {
+    public init(runner: any CommandRunning, fileSystem: any FileSystemReading = LiveFileSystem()) {
         self.runner = runner
+        self.fileSystem = fileSystem
     }
 
-    public var runner: PrivilegedRunner
+    public var runner: any CommandRunning
+    public var fileSystem: any FileSystemReading = LiveFileSystem()
 
     /// What reverting will do, for the confirmation screen.
     public func plan() -> [String] {
@@ -64,11 +66,11 @@ public struct Reverter: Sendable {
         if profiles.output.lowercased().contains(ProfileIdentity.listingMarker) {
             found.append("Configuration profile is installed")
         }
-        if let hosts = try? String(contentsOfFile: "/etc/hosts", encoding: .utf8),
+        if let hosts = fileSystem.contents(atPath: "/etc/hosts"),
            hosts.contains(Hardening.hostsMarkerBegin) {
             found.append("/etc/hosts contains managed entries")
         }
-        if FileManager.default.fileExists(atPath: Hardening.hostsBackupPath) {
+        if fileSystem.fileExists(atPath: Hardening.hostsBackupPath) {
             found.append("A hosts backup exists")
         }
         return found
@@ -90,9 +92,9 @@ public struct Reverter: Sendable {
     /// user added afterwards survive. The backup is only used if the markers
     /// are missing, which would mean the file was edited by hand.
     private func revertHosts() async -> RevertResult {
-        let current = (try? String(contentsOfFile: "/etc/hosts", encoding: .utf8)) ?? ""
+        let current = fileSystem.contents(atPath: "/etc/hosts") ?? ""
         let hasBlock = current.contains(Hardening.hostsMarkerBegin)
-        let hasBackup = FileManager.default.fileExists(atPath: Hardening.hostsBackupPath)
+        let hasBackup = fileSystem.fileExists(atPath: Hardening.hostsBackupPath)
 
         guard hasBlock || hasBackup else {
             return RevertResult(

@@ -21,11 +21,11 @@ public struct PreflightCheck: Identifiable, Sendable {
 /// Nothing here mutates state; it exists so the user sees an accurate picture
 /// (and so Advanced Mode refuses to run somewhere it could do harm).
 public struct Preflight: Sendable {
-    public init(runner: PrivilegedRunner) {
+    public init(runner: any CommandRunning) {
         self.runner = runner
     }
 
-    public var runner: PrivilegedRunner
+    public var runner: any CommandRunning
 
     public func runAll(mode: RunMode) -> [PreflightCheck] {
         var checks = [

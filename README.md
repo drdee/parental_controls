@@ -12,6 +12,29 @@ cd ParentalControls
 open build/ParentalControls.app
 ```
 
+## Testing
+
+```bash
+swift test                       # 195 tests, ~0.5s
+swift test --enable-code-coverage
+```
+
+92.6% line coverage of `FamilySafetyCore`. The suite runs in the pre-commit
+hook and touches nothing on the machine: no network, no `/etc/hosts` edits, no
+profile installs.
+
+Dependencies are injected through three small protocols in `Dependencies.swift`
+— `CommandRunning`, `FileSystemReading` and `PackageDownloading` — with live
+implementations as defaults, so production code constructs `AppState()` and
+tests substitute recording fakes. That is what makes the destructive paths
+testable: revert removes profiles and rewrites `/etc/hosts`, and the WARP
+installer runs a package as root. Neither can be exercised for real, but both
+can be checked for what they *would* do and how they handle failure.
+
+The one deliberate gap is the real 150 MB network download in
+`WARPInstaller.download`, isolated behind `PackageDownloading` so everything
+around it is covered.
+
 ## Development
 
 ```bash

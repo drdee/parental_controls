@@ -8,11 +8,26 @@ import Foundation
 /// traffic on *any* network — which is the only thing here that reaches the
 /// phone-hotspot gap.
 public struct WARPInstaller: Sendable {
-    public init(runner: PrivilegedRunner) {
+    public init(runner: any CommandRunning,
+                fileSystem: any FileSystemReading = LiveFileSystem(),
+                downloader: (any PackageDownloading)? = nil) {
         self.runner = runner
+        self.fileSystem = fileSystem
+        self.downloader = downloader
     }
 
-    public var runner: PrivilegedRunner
+    /// Downloads via the injected downloader when one is supplied.
+    public func fetch(progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+        if let downloader {
+            return try await downloader.download(progress: progress)
+        }
+        return try await download(progress: progress)
+    }
+
+    public var runner: any CommandRunning
+    public var fileSystem: any FileSystemReading = LiveFileSystem()
+    /// Defaults to `self`, which performs the real network download.
+    public var downloader: (any PackageDownloading)?
 
     /// Cloudflare's stable macOS channel. Redirects to a versioned .pkg.
     public static let downloadURL = URL(string: "https://downloads.cloudflareclient.com/v1/download/macos/ga")!
@@ -37,10 +52,14 @@ public struct WARPInstaller: Sendable {
     /// Existing install, if any. Avoids a 150 MB download for nothing.
     public func installedVersion() -> String? {
         let path = "/Applications/Cloudflare WARP.app"
-        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        guard fileSystem.fileExists(atPath: path) else { return nil }
         let plist = path + "/Contents/Info.plist"
         let result = runner.probe("/usr/bin/defaults", ["read", plist, "CFBundleShortVersionString"])
-        let version = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Check the exit code, not just the output: `CommandResult.output`
+        // falls back to stderr, so a failed read would otherwise be reported
+        // to the user as the version string ("does not exist").
+        guard result.succeeded else { return "unknown" }
+        let version = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         return version.isEmpty ? "unknown" : version
     }
 
@@ -138,15 +157,23 @@ public struct WARPInstaller: Sendable {
         defer { try? FileManager.default.removeItem(at: package) }
         try verifySignature(of: package)
 
-        let script = "/usr/sbin/installer -pkg \(shellQuoted(package.path)) -target /"
-        let result = try runner.runPrivileged(script: script, description: "Install Cloudflare WARP")
+        let result = try runner.runPrivileged(
+            script: Self.installCommand(for: package),
+            description: "Install Cloudflare WARP"
+        )
         guard result.succeeded else {
             throw InstallError.installFailed(result.output)
         }
     }
 
+    /// The command handed to the installer, exposed so a test can assert the
+    /// package path is quoted rather than having to run `installer` for real.
+    public static func installCommand(for package: URL) -> String {
+        "/usr/sbin/installer -pkg \(shellQuoted(package.path)) -target /"
+    }
+
     /// Single-quote a path for safe embedding in a shell command.
-    private func shellQuoted(_ path: String) -> String {
+    static func shellQuoted(_ path: String) -> String {
         "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }

@@ -61,14 +61,14 @@ public struct HardeningStep: Identifiable, Sendable {
 /// to supervised (MDM-enrolled) Macs and silently do nothing here, whereas file
 /// permissions and account privilege are enforced by the kernel regardless.
 public struct Hardening: Sendable {
-    public init(runner: PrivilegedRunner, blockedSites: [BlockedSite], youTubeLevel: SafeSearch.YouTubeLevel = .moderate, forceSafeSearch: Bool = true) {
+    public init(runner: any CommandRunning, blockedSites: [BlockedSite], youTubeLevel: SafeSearch.YouTubeLevel = .moderate, forceSafeSearch: Bool = true) {
         self.runner = runner
         self.blockedSites = blockedSites
         self.youTubeLevel = youTubeLevel
         self.forceSafeSearch = forceSafeSearch
     }
 
-    public var runner: PrivilegedRunner
+    public var runner: any CommandRunning
     public var blockedSites: [BlockedSite]
     public var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
     public var forceSafeSearch = true

@@ -40,7 +40,7 @@ public enum RunnerError: LocalizedError {
 /// A `SMAppService` helper would be the textbook approach, but this tool runs
 /// once per machine — a persistent root helper is a larger attack surface than
 /// the job justifies.
-public struct PrivilegedRunner: Sendable {
+public struct PrivilegedRunner: CommandRunning {
     public init(dryRun: Bool = false) {
         self.dryRun = dryRun
     }
@@ -128,42 +128,8 @@ public struct PrivilegedRunner: Sendable {
     }
 }
 
-public extension PrivilegedRunner {
-    /// `run` on a background thread.
-    ///
-    /// The synchronous variants block until the child process exits, which for
-    /// an admin prompt or a package install can be tens of seconds. Calling
-    /// those directly from `@MainActor` freezes the UI, so all callers on the
-    /// main actor should use these.
-    public func runAsync(_ executable: String, _ arguments: [String]) async throws -> CommandResult {
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(with: Result { try run(executable, arguments) })
-            }
-        }
-    }
-
-    public func probeAsync(_ executable: String, _ arguments: [String]) async -> CommandResult {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(returning: probe(executable, arguments))
-            }
-        }
-    }
-
-    /// `runPrivileged` on a background thread. The authorization dialog is
-    /// presented by the system, so it still appears normally.
-    public func runPrivilegedAsync(script: String, description: String) async throws -> CommandResult {
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(with: Result { try runPrivileged(script: script, description: description) })
-            }
-        }
-    }
-}
-
 private extension String {
-    public init(decoding data: Data) {
+    init(decoding data: Data) {
         self = String(data: data, encoding: .utf8) ?? ""
     }
 }
