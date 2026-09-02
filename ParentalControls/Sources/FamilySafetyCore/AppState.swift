@@ -411,12 +411,53 @@ public final class AppState {
         stage = .revertResults
     }
 
+    /// Whether verification re-runs on its own.
+    ///
+    /// On by default on the results screen: the remaining steps are manual and
+    /// happen in System Settings, so the parent would otherwise have to keep
+    /// coming back and pressing a button to find out whether what they just
+    /// did worked.
+    public var continuousVerification = true
+    /// Set while a re-check is in flight, so the UI can show it without
+    /// clearing the previous results.
+    public var isVerifying = false
+    public var lastVerifiedAt: Date?
+
+    /// True once no check is failing.
+    public var everythingVerified: Bool {
+        !verifications.isEmpty && !verifications.contains { $0.outcome == .notWorking }
+    }
+
+    public var verificationsOutstanding: Int {
+        verifications.filter { $0.outcome == .notWorking }.count
+    }
+
+    /// Re-runs verification on an interval until nothing is failing.
+    ///
+    /// Stops once everything passes, so a finished setup does not keep
+    /// shelling out to `dig` and `defaults` indefinitely.
+    public func startContinuousVerification() async {
+        guard !dryRun else { return }
+        while continuousVerification, !Task.isCancelled {
+            await runVerification()
+            if everythingVerified { break }
+            // Long enough not to hammer the resolver, short enough that
+            // flipping a switch in System Settings shows up quickly.
+            try? await Task.sleep(for: .seconds(5))
+        }
+    }
+
     public func runVerification() async {
         // Pointless after a dry run — nothing was applied, so every check would
         // report "not working" and read as a failure rather than a no-op.
         guard !dryRun else {
             verifications = []
             return
+        }
+        isVerifying = true
+        defer {
+            isVerifying = false
+            lastVerifiedAt = Date()
         }
         verifications = await Verifier(runner: runner, fileSystem: fileSystem)
             .runAllAsync(backend: dnsBackend, blockedSites: effectiveBlockedSites)

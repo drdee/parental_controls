@@ -42,7 +42,11 @@ struct ResultsView: View {
                             state.stage = .review
                         }
                     } else {
-                        Button("Verify Again") { Task { await state.runVerification() } }
+                        Button("Check Now") { Task { await state.runVerification() } }
+                            .disabled(state.isVerifying)
+                        if state.continuousVerification, !state.everythingVerified {
+                            Button("Stop Re-checking") { state.continuousVerification = false }
+                        }
                     }
                     Spacer()
                     Button("Done") { NSApplication.shared.terminate(nil) }
@@ -53,7 +57,10 @@ struct ResultsView: View {
             .background(.bar)
         }
         .task {
-            if !state.dryRun { await state.runVerification() }
+            // Keeps checking while the remaining steps are completed in System
+            // Settings, so the screen reflects reality without the parent
+            // having to come back and press a button.
+            if !state.dryRun { await state.startContinuousVerification() }
         }
     }
 
@@ -187,7 +194,22 @@ struct ResultsView: View {
                 }
             }
         } header: {
-            SectionHeader("Verification", systemImage: "checkmark.shield")
+            HStack(spacing: 8) {
+                SectionHeader("Verification", systemImage: "checkmark.shield")
+                if state.isVerifying {
+                    ProgressView().controlSize(.small)
+                }
+                Spacer()
+                if state.everythingVerified {
+                    Label("All checks passing", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                } else if state.continuousVerification {
+                    Text("Re-checking every 5s · \(state.verificationsOutstanding) outstanding")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
@@ -213,7 +235,6 @@ struct ResultsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 bullet("Set up Family Sharing with a Child Apple Account, then turn on Screen Time from your own device. Enforced that way it cannot be switched off on this Mac.")
                 bullet("In Screen Time › Content & Privacy, set App Store purchases to “Don’t Allow” so apps cannot be installed.")
-                bullet("Set the home router's DNS to the same filtering resolver. That covers every device and survives a reinstall of this Mac.")
                 bullet("A phone hotspot bypasses everything configured here. No setting on this Mac can prevent that — it needs Screen Time on the phone and an agreement.")
             }
         } header: {
