@@ -1,10 +1,10 @@
 # macOS Parental Controls
 
-> **Not notarized yet.** Releases are ad-hoc signed, so macOS Gatekeeper will
-> refuse to open the installer on first run. See
-> [Installing the release](#installing-the-release) for the right-click step.
-> If you would rather not bypass Gatekeeper, build from source instead — it is
-> one command.
+> **Not notarized yet.** macOS refuses to open an unsigned `.pkg` at all —
+> right-click → Open works for apps but **not** for installer packages, and
+> clearing the quarantine flag does not help either. Install with
+> `sudo installer -pkg … -target /`, or build from source (one command). See
+> [Installing the release](#installing-the-release).
 
 > **`docs/BYPASS-NOTES.md` documents how to defeat this tool.** That is
 > deliberate: knowing the gaps is more useful to a parent than believing the
@@ -41,17 +41,26 @@ swift package --allow-writing-to-package-directory \
 Download `Family-Safety.pkg` from the
 [latest release](https://github.com/drdee/parental_controls/releases/latest).
 
-Because it is not notarized, **double-clicking will fail** with "cannot be
-opened because it is from an unidentified developer". To install:
+Because it is not notarized, **double-clicking fails** with _"cannot verify
+this app is free of malware"_, and there is no click-through: the right-click →
+Open trick works for `.app` bundles but not for `.pkg` installers. Removing the
+quarantine attribute does not help — the missing signature is what Gatekeeper
+objects to (`spctl -a -t install` reports `source=no usable signature` either
+way).
 
-1. **Right-click** (or Control-click) the `.pkg` → **Open**
-2. Confirm at the prompt
-3. Enter your administrator password when the installer asks
-
-Verify the download first if you like:
+Verify the download, then install from Terminal. `/usr/sbin/installer` does not
+consult Gatekeeper:
 
 ```bash
-shasum -a 256 Family-Safety.pkg   # compare against SHA256SUMS.txt in the release
+shasum -a 256 ~/Downloads/Family-Safety.pkg   # compare against SHA256SUMS.txt
+sudo installer -pkg ~/Downloads/Family-Safety.pkg -target /
+```
+
+Or build from source, which is never quarantined and avoids the issue:
+
+```bash
+swift package --allow-writing-to-package-directory build-family-safety
+sudo installer -pkg build/Family-Safety.pkg -target /
 ```
 
 The installer applies the DNS, browser and hosts-file changes, and leaves the
