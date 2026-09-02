@@ -48,7 +48,6 @@ final class AppState {
 
     var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
     var forceSafeSearch = true
-    var restrictAirDrop = true
     var blockSocialMedia = true
     var blockAIChatbots = true
     var blockChatAndGaming = false
@@ -115,7 +114,6 @@ final class AppState {
             installWARP: installWARP,
             youTubeLevel: youTubeLevel,
             forceSafeSearch: forceSafeSearch,
-            restrictAirDrop: restrictAirDrop,
             createAccount: mode == .advanced && createAccount,
             accountUsername: accountUsername.trimmingCharacters(in: .whitespaces)
         )
@@ -191,8 +189,7 @@ final class AppState {
             blockedSites: effectiveBlockedSites,
             dnsBackend: dnsBackend,
             youTubeLevel: youTubeLevel,
-            forceSafeSearch: forceSafeSearch,
-            restrictAirDrop: restrictAirDrop
+            forceSafeSearch: forceSafeSearch
         )
         do {
             if dryRun {

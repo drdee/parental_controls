@@ -59,7 +59,6 @@ struct ChangePlan {
     var installWARP: Bool
     var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
     var forceSafeSearch = true
-    var restrictAirDrop = true
     var createAccount: Bool
     var accountUsername: String
 
@@ -68,9 +67,6 @@ struct ChangePlan {
 
         if forceSafeSearch || youTubeLevel != .off {
             changes.append(safeSearchChange())
-        }
-        if restrictAirDrop {
-            changes.append(airDropChange())
         }
 
         if installWARP {
@@ -160,17 +156,6 @@ struct ChangePlan {
             howToUndo: "Use Undo All Changes, or remove the entries from the hosts file.",
             impact: .restrictive,
             affects: ["/etc/hosts", "Chrome and other Chromium browser policies"]
-        )
-    }
-
-    private func airDropChange() -> ChangeDescription {
-        ChangeDescription(
-            title: "Turn off AirDrop",
-            whatChanges: "AirDrop is disabled, so files cannot be sent to or received from nearby devices.",
-            whatTheyWillNotice: "AirDrop disappears from the share sheet and Finder. This does affect sharing schoolwork, so it is worth discussing rather than imposing quietly.",
-            howToUndo: "Use Undo All Changes, or remove the configuration profile.",
-            impact: .restrictive,
-            affects: ["AirDrop (system-wide)"]
         )
     }
 

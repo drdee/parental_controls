@@ -108,6 +108,10 @@ So `allowCloudPrivateRelay`, `allowAirDrop`, `allowiPhoneMirroring`,
 `allowUIConfigurationProfileInstallation` and the rest are **not**
 supervision-gated and do apply here.
 
+(`allowAirDrop` is listed as evidence about the platform, not as something this
+tool sets. AirDrop restriction was deliberately dropped: it broke legitimate
+schoolwork file sharing for very little safety gain.)
+
 There is a **separate** gate, which is the one that actually bites:
 `ManagedClient` also logs *"removing keys due to lack of MDM install"*. Some
 payloads require an MDM enrolment channel regardless of supervision. That is why

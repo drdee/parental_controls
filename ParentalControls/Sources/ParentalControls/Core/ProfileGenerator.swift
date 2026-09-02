@@ -11,7 +11,6 @@ struct ProfileGenerator {
     var dnsBackend: DNSBackend = .families
     var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
     var forceSafeSearch = true
-    var restrictAirDrop = true
     var organization: String = "Family"
     var displayName: String = ProfileIdentity.displayName
     var identifierPrefix: String = ProfileIdentity.prefix
@@ -118,11 +117,6 @@ struct ProfileGenerator {
         // on an unsupervised Mac.
         payload["allowUIConfigurationProfileInstallation"] = false
         payload["allowiPhoneMirroring"] = false
-        if restrictAirDrop {
-            // AirDrop from strangers in public is a genuine vector at this age.
-            // Costs legitimate file sharing, so it stays optional.
-            payload["allowAirDrop"] = false
-        }
         return payload
     }
 

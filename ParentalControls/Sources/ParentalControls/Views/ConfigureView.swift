@@ -100,17 +100,9 @@ struct ConfigureView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-
-                Divider()
-
-                Toggle("Turn off AirDrop", isOn: $state.restrictAirDrop)
-                Text("Stops files arriving from strangers nearby. It also affects sharing schoolwork — worth agreeing with them rather than doing quietly.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         } header: {
-            SectionHeader("Safe search and sharing", systemImage: "magnifyingglass.circle")
+            SectionHeader("Safe search", systemImage: "magnifyingglass.circle")
         }
     }
 
