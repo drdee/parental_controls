@@ -15,6 +15,8 @@ struct ConfigureView: View {
 
                 safeSearchSection
 
+                browserSection
+
                 presetsSection
 
                 blockedSitesSection
@@ -103,6 +105,43 @@ struct ConfigureView: View {
             }
         } header: {
             SectionHeader("Safe search", systemImage: "magnifyingglass.circle")
+        }
+    }
+
+    // MARK: - Browser hardening
+
+    private var browserSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Toggle("Install an ad blocker", isOn: $state.installAdBlocker)
+                    Text("Installs uBlock Origin Lite in Chrome automatically. Ad networks are a real route for malware, so this is a security gain as much as a convenience. Every other extension stays blocked, including VPN and proxy ones.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 20)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Toggle("Block third-party cookies", isOn: $state.blockThirdPartyCookies)
+                    Text("Cuts cross-site tracking in Chrome. Safari has done this by default since Safari 13.1, so this brings Chrome to parity. Sign-ins keep working.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 20)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Toggle("Add educational bookmarks", isOn: $state.educationalBookmarks)
+                    Text("Adds a “\(ManagedBookmark.folderName)” folder in Chrome with \(ManagedBookmark.educational.count) reference sites. Chrome only — Safari gives no way to manage bookmarks.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 20)
+                }
+            }
+        } header: {
+            SectionHeader("Browser hardening", systemImage: "shield.lefthalf.filled")
         }
     }
 

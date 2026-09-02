@@ -11,6 +11,9 @@ struct ProfileGenerator {
     var dnsBackend: DNSBackend = .families
     var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
     var forceSafeSearch = true
+    var installAdBlocker = true
+    var blockThirdPartyCookies = true
+    var educationalBookmarks = true
     var organization: String = "Family"
     var displayName: String = ProfileIdentity.displayName
     var identifierPrefix: String = ProfileIdentity.prefix
@@ -177,9 +180,28 @@ struct ProfileGenerator {
         payload["IncognitoModeAvailability"] = 1  // 1 = disabled
         payload["BrowserSignin"] = 0
         payload["SyncDisabled"] = true
-        // A proxy/VPN extension is a likelier bypass than a native VPN app.
+        // A proxy/VPN extension is a likelier bypass than a native VPN app, so
+        // everything is blocked by default and exceptions are explicit.
         payload["ExtensionInstallBlocklist"] = ["*"]
-        payload["ExtensionInstallAllowlist"] = [String]()
+        if installAdBlocker {
+            // Ad networks are a real malware delivery route, so an ad blocker
+            // is a net security gain — the one extension worth allowing.
+            // Forcelist installs it silently; allowlist keeps the "*" block
+            // from overriding that.
+            payload["ExtensionInstallAllowlist"] = [AllowedExtension.uBlockOriginLite]
+            payload["ExtensionInstallForcelist"] = [AllowedExtension.forcelistEntry]
+        } else {
+            payload["ExtensionInstallAllowlist"] = [String]()
+        }
+        if blockThirdPartyCookies {
+            // Parity with Safari, which has blocked these by default since
+            // Safari 13.1. Deliberately not DefaultCookiesSetting = 2, which
+            // would break sign-in on school sites.
+            payload["BlockThirdPartyCookies"] = true
+        }
+        if educationalBookmarks {
+            payload["ManagedBookmarks"] = ManagedBookmark.chromePolicyValue(ManagedBookmark.educational)
+        }
         payload["DeveloperToolsAvailability"] = 2  // 2 = disallowed
         payload["URLBlocklist"] = chromeBlocklist()
         payload["URLAllowlist"] = [String]()

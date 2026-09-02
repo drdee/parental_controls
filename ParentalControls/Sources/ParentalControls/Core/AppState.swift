@@ -48,6 +48,9 @@ final class AppState {
 
     var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
     var forceSafeSearch = true
+    var installAdBlocker = true
+    var blockThirdPartyCookies = true
+    var educationalBookmarks = true
     var blockSocialMedia = true
     var blockAIChatbots = true
     var blockChatAndGaming = false
@@ -114,6 +117,9 @@ final class AppState {
             installWARP: installWARP,
             youTubeLevel: youTubeLevel,
             forceSafeSearch: forceSafeSearch,
+            installAdBlocker: installAdBlocker,
+            blockThirdPartyCookies: blockThirdPartyCookies,
+            educationalBookmarks: educationalBookmarks,
             createAccount: mode == .advanced && createAccount,
             accountUsername: accountUsername.trimmingCharacters(in: .whitespaces)
         )
@@ -189,7 +195,10 @@ final class AppState {
             blockedSites: effectiveBlockedSites,
             dnsBackend: dnsBackend,
             youTubeLevel: youTubeLevel,
-            forceSafeSearch: forceSafeSearch
+            forceSafeSearch: forceSafeSearch,
+            installAdBlocker: installAdBlocker,
+            blockThirdPartyCookies: blockThirdPartyCookies,
+            educationalBookmarks: educationalBookmarks
         )
         do {
             if dryRun {

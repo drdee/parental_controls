@@ -59,6 +59,9 @@ struct ChangePlan {
     var installWARP: Bool
     var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
     var forceSafeSearch = true
+    var installAdBlocker = true
+    var blockThirdPartyCookies = true
+    var educationalBookmarks = true
     var createAccount: Bool
     var accountUsername: String
 
@@ -67,6 +70,15 @@ struct ChangePlan {
 
         if forceSafeSearch || youTubeLevel != .off {
             changes.append(safeSearchChange())
+        }
+        if installAdBlocker {
+            changes.append(adBlockerChange())
+        }
+        if blockThirdPartyCookies {
+            changes.append(cookieChange())
+        }
+        if educationalBookmarks {
+            changes.append(bookmarkChange())
         }
 
         if installWARP {
@@ -156,6 +168,39 @@ struct ChangePlan {
             howToUndo: "Use Undo All Changes, or remove the entries from the hosts file.",
             impact: .restrictive,
             affects: ["/etc/hosts", "Chrome and other Chromium browser policies"]
+        )
+    }
+
+    private func adBlockerChange() -> ChangeDescription {
+        ChangeDescription(
+            title: "Install an ad blocker in Chrome",
+            whatChanges: "uBlock Origin Lite is installed into Chrome automatically. All other extensions remain blocked.",
+            whatTheyWillNotice: "Far fewer ads, and pages load faster. Chrome will show that the extension was installed by an administrator.",
+            howToUndo: "Use Undo All Changes, or remove the configuration profile.",
+            impact: .additive,
+            affects: ["Chrome extensions"]
+        )
+    }
+
+    private func cookieChange() -> ChangeDescription {
+        ChangeDescription(
+            title: "Block third-party cookies in Chrome",
+            whatChanges: "Chrome stops accepting cookies set by sites other than the one being visited. Safari already does this by default.",
+            whatTheyWillNotice: "Less cross-site ad tracking. Signing in to sites still works normally.",
+            howToUndo: "Use Undo All Changes, or remove the configuration profile.",
+            impact: .restrictive,
+            affects: ["Chrome cookie settings"]
+        )
+    }
+
+    private func bookmarkChange() -> ChangeDescription {
+        ChangeDescription(
+            title: "Add educational bookmarks to Chrome",
+            whatChanges: "Adds a read-only “\(ManagedBookmark.folderName)” folder containing \(ManagedBookmark.educational.count) reference sites such as Khan Academy and Wikipedia.",
+            whatTheyWillNotice: "A new bookmarks folder in Chrome that they cannot delete. Nothing else changes, and nothing is blocked by this.",
+            howToUndo: "Use Undo All Changes, or remove the configuration profile.",
+            impact: .additive,
+            affects: ["Chrome bookmarks"]
         )
     }
 

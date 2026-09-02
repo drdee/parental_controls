@@ -30,6 +30,23 @@ filtering), a hardcoded profile identifier (which would let generation and
 revert drift apart), and an unquoted path interpolated into a privileged script
 (which allowed a newline command injection).
 
+## Browser hardening
+
+Three options, all on by default and all Chromium-only:
+
+- **Ad blocker** — force-installs uBlock Origin Lite
+  (`ddkjiahejlhfcafbddmgiahcphecmpfh`, verified live in the Chrome Web Store).
+  Ad networks are a real malware delivery route, so this is a security control
+  as much as a convenience. Every other extension stays blocked, including VPN
+  and proxy ones — turning the ad blocker *off* does not reopen that hole.
+  Note the original uBlock Origin was delisted with MV2; only *Lite* installs.
+- **Third-party cookies** — `BlockThirdPartyCookies`. Brings Chrome to parity
+  with Safari, which has blocked these by default since Safari 13.1.
+  Deliberately *not* `DefaultCookiesSetting = 2`, which breaks school logins.
+- **Educational bookmarks** — a read-only "Learning" folder via
+  `ManagedBookmarks`. Safari has no managed-bookmark payload, so this is
+  Chrome-only. All eight URLs verified reachable.
+
 ## Preset categories
 
 Blocking is grouped into checkboxes rather than a flat list, because a parent

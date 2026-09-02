@@ -329,3 +329,61 @@ struct ChromiumBrowser: Identifiable, Sendable {
         Self(name: "Opera", domain: "com.operasoftware.Opera"),
     ]
 }
+
+/// Chrome extensions we deliberately permit.
+///
+/// The default policy blocks every extension, because a proxy or VPN extension
+/// is an easier bypass than a native app. An ad blocker is the one exception
+/// worth making: ad networks are a real malware delivery route, so blocking
+/// them is a net security gain rather than a convenience.
+enum AllowedExtension {
+    /// uBlock Origin Lite. Verified live in the Chrome Web Store.
+    ///
+    /// Note this is *Lite* (Manifest V3). The original uBlock Origin was
+    /// delisted with the MV2 deprecation, so its ID no longer installs.
+    static let uBlockOriginLite = "ddkjiahejlhfcafbddmgiahcphecmpfh"
+
+    /// Chrome expects `<id>;<update-url>` in `ExtensionInstallForcelist`.
+    static let chromeWebStoreUpdateURL = "https://clients2.google.com/service/update2/crx"
+
+    static var forcelistEntry: String {
+        "\(uBlockOriginLite);\(chromeWebStoreUpdateURL)"
+    }
+}
+
+/// A bookmark pushed into a managed folder in Chrome.
+///
+/// Chrome-only: Safari keeps bookmarks in a per-user, TCC-protected plist with
+/// no managed-preference equivalent, so there is no way to set them from here.
+struct ManagedBookmark: Sendable {
+    var name: String
+    var url: String
+}
+
+extension ManagedBookmark {
+    static let folderName = "Learning"
+
+    /// Deliberately short. A long imposed list reads as homework-by-decree and
+    /// gets ignored; these are genuinely useful starting points.
+    static let educational: [ManagedBookmark] = [
+        ManagedBookmark(name: "Khan Academy", url: "https://www.khanacademy.org"),
+        ManagedBookmark(name: "Wikipedia", url: "https://en.wikipedia.org"),
+        // Britannica was dropped: it returns 403 to non-residential clients,
+        // so it could not be verified as reachable.
+        ManagedBookmark(name: "MIT OpenCourseWare", url: "https://ocw.mit.edu"),
+        ManagedBookmark(name: "Wolfram Alpha", url: "https://www.wolframalpha.com"),
+        ManagedBookmark(name: "Desmos Graphing", url: "https://www.desmos.com/calculator"),
+        ManagedBookmark(name: "Project Gutenberg", url: "https://www.gutenberg.org"),
+        ManagedBookmark(name: "NASA", url: "https://www.nasa.gov"),
+        ManagedBookmark(name: "BBC Bitesize", url: "https://www.bbc.co.uk/bitesize"),
+    ]
+
+    /// Chrome's `ManagedBookmarks` shape: an optional toplevel-name marker
+    /// followed by folder/link dictionaries.
+    static func chromePolicyValue(_ bookmarks: [ManagedBookmark]) -> [[String: Any]] {
+        [[
+            "name": folderName,
+            "children": bookmarks.map { ["name": $0.name, "url": $0.url] },
+        ]]
+    }
+}
