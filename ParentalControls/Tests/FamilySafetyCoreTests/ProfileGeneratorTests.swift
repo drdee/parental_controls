@@ -360,11 +360,11 @@ struct ProfileGeneratorTests {
             let policy = byType[browser.domain]!
             #expect(policy["ExtensionInstallBlocklist"] as? [String] == ["*"], "\(browser.name)")
             #expect(policy["ExtensionInstallAllowlist"] as? [String]
-                    == [AllowedExtension.uBlockOriginLite], "\(browser.name)")
+                    == AllowedExtension.allowedIdentifiers, "\(browser.name)")
             let forcelist = policy["ExtensionInstallForcelist"] as! [String]
             #expect(forcelist.count == 1)
             // Chrome expects "<id>;<update-url>".
-            #expect(forcelist[0] == AllowedExtension.forcelistEntry)
+            #expect(forcelist[0] == AllowedExtension.forcelistEntries[0])
             #expect(forcelist[0].contains(";https://"))
         }
     }
@@ -379,7 +379,10 @@ struct ProfileGeneratorTests {
         for browser in ChromiumBrowser.all {
             let policy = byType[browser.domain]!
             #expect(policy["ExtensionInstallBlocklist"] as? [String] == ["*"], "\(browser.name)")
-            #expect((policy["ExtensionInstallAllowlist"] as? [String])?.isEmpty == true, "\(browser.name)")
+            // Docs Offline and 1Password remain allowed: turning off the ad
+            // blocker should not break offline schoolwork or password filling.
+            #expect(policy["ExtensionInstallAllowlist"] as? [String]
+                    == AllowedExtension.alwaysAllowedIdentifiers, "\(browser.name)")
             #expect(policy["ExtensionInstallForcelist"] == nil, "\(browser.name)")
         }
     }

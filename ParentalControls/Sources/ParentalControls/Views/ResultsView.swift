@@ -44,9 +44,6 @@ struct ResultsView: View {
                     } else {
                         Button("Check Now") { Task { await state.runVerification() } }
                             .disabled(state.isVerifying)
-                        if state.continuousVerification, !state.everythingVerified {
-                            Button("Stop Re-checking") { state.continuousVerification = false }
-                        }
                     }
                     Spacer()
                     Button("Done") { NSApplication.shared.terminate(nil) }

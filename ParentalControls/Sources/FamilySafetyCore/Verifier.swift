@@ -21,13 +21,17 @@ public struct Verification: Identifiable, Sendable {
 }
 
 public struct Verifier: Sendable {
-    public init(runner: any CommandRunning, fileSystem: any FileSystemReading = LiveFileSystem()) {
+    public init(runner: any CommandRunning,
+                fileSystem: any FileSystemReading = LiveFileSystem(),
+                resolver: any HostResolving = SystemResolver()) {
         self.runner = runner
         self.fileSystem = fileSystem
+        self.resolver = resolver
     }
 
     public var runner: any CommandRunning
     public var fileSystem: any FileSystemReading = LiveFileSystem()
+    public var resolver: any HostResolving = SystemResolver()
 
     /// A domain Cloudflare's adult-content filter is known to block. Used only
     /// as a probe — comparing a filtered resolver against an unfiltered one is
@@ -113,16 +117,36 @@ public struct Verifier: Sendable {
         )
     }
 
+    /// Whether an encrypted resolver is actually in effect.
+    ///
+    /// `scutil --dns` does not report DNS-over-HTTPS at all — it lists only
+    /// plaintext nameservers — so it can never confirm this. Instead this
+    /// resolves a domain the filtering resolver blocks and checks the answer,
+    /// which is the only observable difference.
     private func systemResolver() -> Verification {
-        let output = runner.probe("/usr/sbin/scutil", ["--dns"]).output
-        // An encrypted-DNS profile shows up as a DoH/DoT resolver entry.
-        let encrypted = output.contains("cloudflare") || output.lowercased().contains("https")
+        let blocked = resolver.addresses(for: Self.knownBlockedDomain)
+        let control = resolver.addresses(for: "example.com")
+
+        guard !control.isEmpty else {
+            return Verification(
+                title: "System resolver",
+                outcome: .inconclusive,
+                detail: "No DNS resolution at all — check the network connection",
+                remedy: nil
+            )
+        }
+        if Self.looksBlocked(blocked) {
+            return Verification(
+                title: "System resolver",
+                outcome: .verified,
+                detail: "Encrypted filtering DNS is in effect"
+            )
+        }
         return Verification(
             title: "System resolver",
-            outcome: encrypted ? .verified : .inconclusive,
-            detail: encrypted ? "Encrypted DNS resolver is configured"
-                              : "Could not confirm an encrypted resolver",
-            remedy: encrypted ? nil : "Check System Settings › Network › Details › DNS."
+            outcome: .notWorking,
+            detail: "DNS is working but not filtering",
+            remedy: "Install the configuration profile, then check System Settings › Network › DNS shows the filtering resolver."
         )
     }
 
@@ -134,28 +158,32 @@ public struct Verifier: Sendable {
     /// known-blocked domain against an unfiltered resolver is what actually
     /// proves the filter is live.
     private func adultContentFiltering() -> Verification {
-        let filtered = resolve(Self.knownBlockedDomain, using: nil)
-        let unfiltered = resolve(Self.knownBlockedDomain, using: Self.unfilteredResolver)
+        let filtered = resolver.addresses(for: Self.knownBlockedDomain)
+        // A reference lookup through dig, which bypasses DoH, tells us the
+        // domain really does resolve when unfiltered — so a block is a block
+        // and not just an outage.
+        let unfiltered = digAddresses(Self.knownBlockedDomain, using: Self.unfilteredResolver)
 
-        let isBlocked = filtered.contains("0.0.0.0") || filtered.isEmpty
-        let controlWorked = !unfiltered.isEmpty && !unfiltered.contains("0.0.0.0")
-
-        if !controlWorked {
+        if Self.looksBlocked(filtered) {
+            return Verification(
+                title: "Adult content filtering",
+                outcome: .verified,
+                detail: "Test domain is blocked by the configured resolver"
+            )
+        }
+        guard !unfiltered.isEmpty else {
             return Verification(
                 title: "Adult content filtering",
                 outcome: .inconclusive,
                 detail: "Could not reach a reference resolver to compare against",
-                remedy: "Check the network connection and run verification again."
+                remedy: "Check the network connection and check again."
             )
         }
-
         return Verification(
             title: "Adult content filtering",
-            outcome: isBlocked ? .verified : .notWorking,
-            detail: isBlocked
-                ? "Test domain is blocked by the configured resolver"
-                : "Test domain still resolves — filtering is NOT active",
-            remedy: isBlocked ? nil : "DNS queries are not going through the filtering resolver. If you are using Zero Trust, re-check the gateway endpoint: a mistyped ID still answers DNS but applies no policy."
+            outcome: .notWorking,
+            detail: "Test domain still resolves — filtering is NOT active",
+            remedy: "Install the configuration profile. If you are using Zero Trust, re-check the gateway endpoint: a mistyped ID still answers DNS but applies no policy."
         )
     }
 
@@ -165,18 +193,44 @@ public struct Verifier: Sendable {
                                 detail: "No sites configured", remedy: nil)
         }
         let host = "www.\(first.domain)"
-        let answer = resolve(host, using: nil)
-        let blocked = answer.contains("0.0.0.0") || answer.contains("127.0.0.1") || answer.isEmpty
+        let addresses = resolver.addresses(for: host)
+
+        if Self.looksBlocked(addresses) {
+            return Verification(
+                title: "Named sites blocked",
+                outcome: .verified,
+                detail: "\(host) does not resolve to a real address"
+            )
+        }
         return Verification(
             title: "Named sites blocked",
-            outcome: blocked ? .verified : .inconclusive,
-            detail: blocked ? "\(host) does not resolve to a real address"
-                            : "\(host) still resolves to \(answer)",
-            remedy: blocked ? nil : "The DNS resolver may not block this category. Browser policy and /etc/hosts still apply — test in a browser to confirm."
+            outcome: .notWorking,
+            detail: "\(host) still resolves",
+            remedy: "The /etc/hosts entries may not have been applied. Re-run the installer, then check again."
         )
     }
 
-    // MARK: - Manual steps
+    /// Whether a set of addresses represents a block.
+    ///
+    /// Filtering resolvers answer with a sinkhole address rather than failing,
+    /// and `/etc/hosts` entries point at 0.0.0.0, so an empty answer and a
+    /// sinkholed one both mean blocked.
+    static func looksBlocked(_ addresses: [String]) -> Bool {
+        if addresses.isEmpty { return true }
+        let sinkholes: Set<String> = ["0.0.0.0", "127.0.0.1", "::"]
+        return addresses.allSatisfy(sinkholes.contains)
+    }
+
+    /// A deliberate out-of-band lookup, used only as a control.
+    private func digAddresses(_ host: String, using resolverAddress: String) -> [String] {
+        runner.probe("/usr/bin/dig", ["+short", "+time=3", "+tries=1", "@\(resolverAddress)", host, "A"])
+            .stdout
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.first?.isNumber == true }
+    }
+
+    // MARK: - Manual steps    // MARK: - Manual steps
 
     /// Whether Screen Time is switched on for this user.
     ///
@@ -267,16 +321,6 @@ public struct Verifier: Sendable {
 
     // MARK: - Helpers
 
-    /// Resolves `host`, optionally against a specific resolver.
-    private func resolve(_ host: String, using resolver: String?) -> String {
-        var arguments = ["+short", "+time=3", "+tries=1"]
-        if let resolver { arguments.append("@\(resolver)") }
-        arguments += [host, "A"]
-        return runner.probe("/usr/bin/dig", arguments).output
-            .split(separator: "\n")
-            .map(String.init)
-            .joined(separator: " ")
-    }
 }
 
 public extension Verifier {

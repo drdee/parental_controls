@@ -88,3 +88,51 @@ public protocol PackageDownloading: Sendable {
     /// Downloads to a local file and reports progress as a 0...1 fraction.
     func download(progress: @escaping @Sendable (Double) -> Void) async throws -> URL
 }
+
+/// Resolves hostnames the way the rest of the system does.
+///
+/// Deliberately *not* `dig`. `dig` reads `/etc/resolv.conf` and speaks UDP/53
+/// to those nameservers directly, which bypasses the system's
+/// DNS-over-HTTPS configuration entirely — so a profile-installed DoH resolver
+/// is invisible to it, and filtering appears not to work when it does.
+///
+/// `getaddrinfo` goes through mDNSResponder, which honours the encrypted-DNS
+/// settings a configuration profile installs. It is the same path a browser
+/// takes, so it answers the question actually being asked: will this name
+/// resolve for my daughter?
+public protocol HostResolving: Sendable {
+    /// Resolved IPv4 addresses, or an empty array if the name does not resolve.
+    func addresses(for host: String) -> [String]
+}
+
+public struct SystemResolver: HostResolving {
+    public init() {}
+
+    public func addresses(for host: String) -> [String] {
+        var hints = addrinfo(
+            ai_flags: 0, ai_family: AF_INET, ai_socktype: SOCK_STREAM,
+            ai_protocol: 0, ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil
+        )
+        var result: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(host, nil, &hints, &result) == 0, let first = result else {
+            return []
+        }
+        defer { freeaddrinfo(first) }
+
+        var addresses: [String] = []
+        var node: UnsafeMutablePointer<addrinfo>? = first
+        while let current = node {
+            if let socketAddress = current.pointee.ai_addr {
+                var address = socketAddress
+                    .withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
+                    .sin_addr
+                var buffer = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+                if inet_ntop(AF_INET, &address, &buffer, socklen_t(INET6_ADDRSTRLEN)) != nil {
+                    addresses.append(String(cString: buffer))
+                }
+            }
+            node = current.pointee.ai_next
+        }
+        return addresses
+    }
+}

@@ -185,11 +185,36 @@ struct BrowserTests {
 
     @Test("The forcelist entry uses Chrome's id;update-url form")
     func forcelistFormat() {
-        let entry = AllowedExtension.forcelistEntry
-        let parts = entry.split(separator: ";")
+        #expect(AllowedExtension.forcelistEntries.count == 1)
+        let parts = AllowedExtension.forcelistEntries[0].split(separator: ";")
         #expect(parts.count == 2)
         #expect(parts[0] == AllowedExtension.uBlockOriginLite)
         #expect(parts[1].hasPrefix("https://"))
+    }
+
+    /// Every allowlisted extension id, verified live in the Chrome Web Store.
+    @Test("Allowed extension ids are well-formed and distinct")
+    func allowedExtensionIdentifiers() {
+        let identifiers = AllowedExtension.allowedIdentifiers
+        #expect(identifiers.count == 3)
+        #expect(Set(identifiers).count == identifiers.count)
+        for identifier in identifiers {
+            #expect(identifier.count == 32, "Chrome ids are 32 characters: \(identifier)")
+            #expect(identifier.allSatisfy { $0.isLowercase && $0.isLetter })
+        }
+        #expect(identifiers.contains(AllowedExtension.googleDocsOffline))
+        #expect(identifiers.contains(AllowedExtension.onePassword))
+    }
+
+    /// These exist to avoid breaking legitimate use, so they stay permitted
+    /// even with the ad blocker off.
+    @Test("Docs Offline and 1Password are always allowed")
+    func alwaysAllowed() {
+        let always = AllowedExtension.alwaysAllowedIdentifiers
+        #expect(always.contains(AllowedExtension.googleDocsOffline))
+        #expect(always.contains(AllowedExtension.onePassword))
+        // The ad blocker is a control, not an exemption.
+        #expect(!always.contains(AllowedExtension.uBlockOriginLite))
     }
 }
 

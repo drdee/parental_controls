@@ -227,10 +227,12 @@ public struct ProfileGenerator {
             // is a net security gain — the one extension worth allowing.
             // Forcelist installs it silently; allowlist keeps the "*" block
             // from overriding that.
-            payload["ExtensionInstallAllowlist"] = [AllowedExtension.uBlockOriginLite]
-            payload["ExtensionInstallForcelist"] = [AllowedExtension.forcelistEntry]
+            payload["ExtensionInstallAllowlist"] = AllowedExtension.allowedIdentifiers
+            payload["ExtensionInstallForcelist"] = AllowedExtension.forcelistEntries
         } else {
-            payload["ExtensionInstallAllowlist"] = [String]()
+            // Google Docs Offline stays allowed regardless: the blanket block
+            // would otherwise stop offline editing of schoolwork.
+            payload["ExtensionInstallAllowlist"] = AllowedExtension.alwaysAllowedIdentifiers
         }
         if blockThirdPartyCookies {
             // Parity with Safari, which has blocked these by default since

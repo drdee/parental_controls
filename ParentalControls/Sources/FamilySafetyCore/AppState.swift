@@ -31,13 +31,16 @@ public final class AppState {
     private let injectedRunner: (any CommandRunning)?
     private let fileSystem: any FileSystemReading
     private let downloader: (any PackageDownloading)?
+    private let resolver: any HostResolving
 
     public init(runner: (any CommandRunning)? = nil,
                 fileSystem: any FileSystemReading = LiveFileSystem(),
-                downloader: (any PackageDownloading)? = nil) {
+                downloader: (any PackageDownloading)? = nil,
+                resolver: any HostResolving = SystemResolver()) {
         self.injectedRunner = runner
         self.fileSystem = fileSystem
         self.downloader = downloader
+        self.resolver = resolver
     }
 
     // MARK: - Configuration
@@ -459,7 +462,7 @@ public final class AppState {
             isVerifying = false
             lastVerifiedAt = Date()
         }
-        verifications = await Verifier(runner: runner, fileSystem: fileSystem)
+        verifications = await Verifier(runner: runner, fileSystem: fileSystem, resolver: resolver)
             .runAllAsync(backend: dnsBackend, blockedSites: effectiveBlockedSites)
     }
 }

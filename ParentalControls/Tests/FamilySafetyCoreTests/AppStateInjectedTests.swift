@@ -243,50 +243,54 @@ struct AppStateInjectedTests {
         #expect(profile.remedy?.contains("Device Management") == true)
     }
 
-    /// A mistyped Zero Trust gateway still answers DNS, so only a functional
-    /// check proves filtering is live.
-    @Test("Filtering that is not active is reported as not working")
-    func inactiveFilteringDetected() async {
-        let runner = FakeRunner()
-        // The reference resolver answers, and so does the configured one:
-        // the test domain resolves, so filtering is not active.
-        runner.stub("dig", stdout: "66.254.114.41")
-        let appState = state(runner, .clean)
-
-        await appState.runVerification()
-
-        let filtering = appState.verifications.first { $0.title.contains("Adult content") }!
-        #expect(filtering.outcome == .notWorking)
-        #expect(filtering.remedy?.contains("gateway") == true)
-    }
-
     @Test("Filtering that is active is reported as verified")
     func activeFilteringDetected() async {
-        // The configured resolver sinkholes; the reference resolver does not.
-        final class SplitResolver: CommandRunning, @unchecked Sendable {
-            func run(_ executable: String, _ arguments: [String]) throws -> CommandResult {
-                probe(executable, arguments)
-            }
-            func probe(_ executable: String, _ arguments: [String]) -> CommandResult {
-                guard executable.contains("dig") else {
-                    return CommandResult(command: executable, exitCode: 0, stdout: "", stderr: "")
-                }
-                let usesReference = arguments.contains { $0.hasPrefix("@") }
-                return CommandResult(command: executable, exitCode: 0,
-                                     stdout: usesReference ? "66.254.114.41" : "0.0.0.0",
-                                     stderr: "")
-            }
-            func runPrivileged(script: String, description: String) throws -> CommandResult {
-                CommandResult(command: script, exitCode: 0, stdout: "", stderr: "")
-            }
-        }
-
-        let appState = AppState(runner: SplitResolver(), fileSystem: FakeFileSystem.configured,
-                                downloader: FakeDownloader())
+        let runner = FakeRunner()
+        // The system resolver sinkholes the test domain, which is what a
+        // working filtering resolver looks like from the app's point of view.
+        let appState = AppState(
+            runner: runner,
+            fileSystem: FakeFileSystem.configured,
+            downloader: FakeDownloader(),
+            resolver: FakeResolver.filtering(["pornhub.com", "www.tiktok.com"])
+        )
         await appState.runVerification()
 
         let filtering = appState.verifications.first { $0.title.contains("Adult content") }!
         #expect(filtering.outcome == .verified)
+
+        let resolver = appState.verifications.first { $0.title.contains("System resolver") }!
+        #expect(resolver.outcome == .verified)
+
+        let sites = appState.verifications.first { $0.title.contains("Named sites") }!
+        #expect(sites.outcome == .verified)
+    }
+
+    /// `scutil --dns` cannot report DNS-over-HTTPS, and `dig` bypasses it
+    /// entirely, so these checks depend on resolving through the system
+    /// resolver. An unfiltered answer must read as a failure.
+    @Test("Filtering that is not active is reported as not working")
+    func inactiveFilteringViaSystemResolver() async {
+        let appState = AppState(
+            runner: FakeRunner(),
+            fileSystem: FakeFileSystem.configured,
+            downloader: FakeDownloader(),
+            resolver: FakeResolver.unfiltered
+        )
+        await appState.runVerification()
+
+        let resolver = appState.verifications.first { $0.title.contains("System resolver") }!
+        #expect(resolver.outcome == .notWorking)
+    }
+
+    @Test("An empty DNS answer counts as blocked")
+    func emptyAnswerIsBlocked() {
+        #expect(Verifier.looksBlocked([]))
+        #expect(Verifier.looksBlocked(["0.0.0.0"]))
+        #expect(Verifier.looksBlocked(["127.0.0.1"]))
+        #expect(!Verifier.looksBlocked(["93.184.216.34"]))
+        // A mixed answer is not a block.
+        #expect(!Verifier.looksBlocked(["0.0.0.0", "93.184.216.34"]))
     }
 
     // MARK: - Revert through AppState

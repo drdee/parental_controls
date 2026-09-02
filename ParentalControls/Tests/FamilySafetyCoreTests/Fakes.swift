@@ -152,3 +152,27 @@ struct FakeDownloader: PackageDownloading {
         return url
     }
 }
+
+/// Resolves from a fixed table, so filtering can be simulated without touching
+/// the network or depending on the machine's real DNS configuration.
+struct FakeResolver: HostResolving {
+    /// Hosts mapped to the addresses they resolve to. A sinkhole address or an
+    /// empty array means blocked.
+    var table: [String: [String]] = [:]
+    /// Used for any host not in the table.
+    var fallback: [String] = ["93.184.216.34"]
+
+    func addresses(for host: String) -> [String] {
+        table[host] ?? fallback
+    }
+
+    /// A resolver where the filtered domains are sinkholed.
+    static func filtering(_ blocked: [String]) -> FakeResolver {
+        var table: [String: [String]] = [:]
+        for host in blocked { table[host] = ["0.0.0.0"] }
+        return FakeResolver(table: table)
+    }
+
+    /// A resolver that filters nothing.
+    static var unfiltered: FakeResolver { FakeResolver() }
+}

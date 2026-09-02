@@ -343,13 +343,41 @@ public enum AllowedExtension {
     /// delisted with the MV2 deprecation, so its ID no longer installs.
     public static let uBlockOriginLite = "ddkjiahejlhfcafbddmgiahcphecmpfh"
 
+    /// Google Docs Offline. Verified live in the Chrome Web Store.
+    ///
+    /// Without it, Docs, Sheets and Slides cannot be edited without a
+    /// connection — the blanket extension block would break schoolwork.
+    public static let googleDocsOffline = "ghbmnnjooekpmoecnnnilnnbdlolhkhi"
+
+    /// 1Password. Verified live in the Chrome Web Store.
+    ///
+    /// A password manager makes good password habits practical, which matters
+    /// more at this age than the marginal risk of one more extension.
+    public static let onePassword = "aeblfdkhhhdcdjpifhhbdiojplfjncoa"
+
     /// Chrome expects `<id>;<update-url>` in `ExtensionInstallForcelist`.
     public static let chromeWebStoreUpdateURL = "https://clients2.google.com/service/update2/crx"
 
-    public static var forcelistEntry: String {
-        "\(uBlockOriginLite);\(chromeWebStoreUpdateURL)"
+    /// Extensions permitted despite the blanket block.
+    ///
+    /// Each is publisher-known and has no proxy or VPN capability, so none
+    /// reopens the bypass the blocklist exists to close.
+    public static let allowedIdentifiers = [uBlockOriginLite, googleDocsOffline, onePassword]
+
+    /// Extensions to install automatically.
+    ///
+    /// Only the ad blocker: it is a security control, so it should be present
+    /// whether or not anyone asks for it. Docs Offline and 1Password are
+    /// permitted but left to be installed by whoever wants them.
+    public static var forcelistEntries: [String] {
+        ["\(uBlockOriginLite);\(chromeWebStoreUpdateURL)"]
     }
+
+    /// Permitted even when the ad blocker is turned off, since these exist to
+    /// avoid breaking legitimate use rather than to add protection.
+    public static let alwaysAllowedIdentifiers = [googleDocsOffline, onePassword]
 }
+
 
 /// A bookmark pushed into a managed folder in Chrome.
 ///
