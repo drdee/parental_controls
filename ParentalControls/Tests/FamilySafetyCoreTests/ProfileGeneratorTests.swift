@@ -98,6 +98,17 @@ struct ProfileGeneratorTests {
         #expect(addresses.contains("2606:4700:4700::1003"))
     }
 
+    /// Regression guard: keys marked `allowmanualinstall: false` in Apple's
+    /// schema require MDM delivery and fail a manual install.
+    @Test("No key requiring MDM delivery is emitted")
+    func noManualInstallForbiddenKeys() throws {
+        let (_, byType) = try payloads(ProfileGenerator(blockedSites: standardSites))
+        let access = byType["com.apple.applicationaccess"]!
+        for key in ["allowSafariPrivateBrowsing", "allowSafariHistoryClearing"] {
+            #expect(access[key] == nil, "\(key) requires MDM and breaks a manual install")
+        }
+    }
+
     /// Regression guard.
     ///
     /// `ProhibitDisablement` requires the profile to arrive over an MDM
@@ -192,8 +203,6 @@ struct ProfileGeneratorTests {
         let access = byType["com.apple.applicationaccess"]!
         for key in [
             "allowCloudPrivateRelay",
-            "allowSafariPrivateBrowsing",
-            "allowSafariHistoryClearing",
             "allowLocalUserCreation",
             "allowStartupDiskModification",
             "allowAccountModification",

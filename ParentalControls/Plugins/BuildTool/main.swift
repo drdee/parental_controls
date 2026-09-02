@@ -65,6 +65,44 @@ struct BuildTool: CommandPlugin {
         }
     }
 
+    /// Checks the generated profile against Apple's published schemas.
+    ///
+    /// Three payload keys and one whole payload have had to be removed after
+    /// failing the *entire* profile install on a Mac without MDM. Every one was
+    /// avoidable: Apple's device-management schemas state plainly which keys
+    /// macOS supports and which require MDM delivery. This runs on every build
+    /// so that class of bug cannot reach a release again.
+    private func lintProfile(_ profile: URL, build: BuildEnvironment) throws {
+        let linter = build.plugin.package.directoryURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("tools/lint-profile.py")
+
+        guard FileManager.default.fileExists(atPath: linter.path) else {
+            Log.detail("profile lint", "skipped (tools/lint-profile.py not found)")
+            return
+        }
+
+        let python = try build.plugin.tool(named: "python3")
+        let process = Process()
+        process.executableURL = python.url
+        process.arguments = [linter.path, profile.path]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = output
+        try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        let text = String(data: data, encoding: .utf8) ?? ""
+
+        guard process.terminationStatus == 0 else {
+            // A key macOS cannot handle does not degrade — it fails the whole
+            // install with one opaque error. Better to fail the build.
+            throw BuildError.step("the generated profile failed schema linting:\n" + text)
+        }
+        Log.detail("profile lint", "ok")
+    }
+
     // MARK: - Version
 
     /// Decides the version for this build and persists it to VERSION.
@@ -356,6 +394,11 @@ struct BuildTool: CommandPlugin {
         // Check the syntax here: a broken script would otherwise fail at
         // install time, after the user has already authenticated.
         try build.run("bash", ["-n", postinstall.path], describing: "checking script syntax")
+
+        try lintProfile(
+            scripts.appendingPathComponent("Family-Safety.mobileconfig"),
+            build: build
+        )
 
         Log.step("Building installer package")
 

@@ -70,6 +70,29 @@ automatically.
 
 To undo everything, build and run the app and choose **Undo All Changes**.
 
+## Profile linting
+
+Apple publishes machine-readable schemas for every payload at
+[apple/device-management](https://github.com/apple/device-management).
+`tools/lint-profile.py` checks the generated profile against them, and the
+build fails if anything is wrong:
+
+```bash
+tools/lint-profile.py ParentalControls/build/scripts/Family-Safety.mobileconfig
+```
+
+It catches the two traps that cost this project three releases:
+
+- **`introduced: n/a`** — the key is in the schema but the platform never
+  supported it (e.g. `AutoFilterEnabled` on macOS).
+- **`allowmanualinstall: false`** — the key only works when the profile arrives
+  over MDM (e.g. `allowSafariPrivateBrowsing`). A manually installed profile
+  containing it fails outright.
+
+Neither degrades gracefully. One unsupported key fails the *entire* profile
+install with a single opaque `CPDomainPlugin` error, so DNS filtering, browser
+policy and restrictions all die together.
+
 ## Testing
 
 ```bash

@@ -130,9 +130,14 @@ public struct ProfileGenerator {
         var payload = base("com.apple.applicationaccess", "restrictions", "Restrictions")
         // Private Relay tunnels DNS and would bypass the resolver above.
         payload["allowCloudPrivateRelay"] = false
-        payload["allowSafariPrivateBrowsing"] = false
-        // Keeps the history trail intact, which is often more useful than the block.
-        payload["allowSafariHistoryClearing"] = false
+        // allowSafariPrivateBrowsing and allowSafariHistoryClearing are
+        // deliberately NOT set. Apple's schema marks both
+        // `allowmanualinstall: false` on macOS: they require the profile to
+        // arrive over MDM, and including them fails a manual install outright
+        // with "unexpected error CPDomainPlugin:101".
+        //
+        // Safari private browsing is instead disabled through Screen Time's
+        // Content & Privacy settings — see docs/MANUAL-STEPS.md.
         payload["allowLocalUserCreation"] = false
         payload["allowStartupDiskModification"] = false
         payload["allowAccountModification"] = false
