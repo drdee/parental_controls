@@ -1,5 +1,16 @@
 # macOS Parental Controls
 
+> **Not notarized yet.** Releases are ad-hoc signed, so macOS Gatekeeper will
+> refuse to open the installer on first run. See
+> [Installing the release](#installing-the-release) for the right-click step.
+> If you would rather not bypass Gatekeeper, build from source instead — it is
+> one command.
+
+> **`docs/BYPASS-NOTES.md` documents how to defeat this tool.** That is
+> deliberate: knowing the gaps is more useful to a parent than believing the
+> setup is airtight. It does mean a determined teenager who finds this repo has
+> a roadmap. Judge for yourself whether to share the link or just the installer.
+
 A native macOS app that configures content filtering and device restrictions on
 a Mac. Built for two MacBook Airs (macOS 26 Tahoe, Apple Silicon), designed so
 the safe subset can be handed to other families.
@@ -24,6 +35,31 @@ swift package build-family-safety --help          # all options
 swift package --allow-writing-to-package-directory \
   build-family-safety --mode advanced --version 2.0
 ```
+
+## Installing the release
+
+Download `Family-Safety.pkg` from the
+[latest release](https://github.com/drdee/parental_controls/releases/latest).
+
+Because it is not notarized, **double-clicking will fail** with "cannot be
+opened because it is from an unidentified developer". To install:
+
+1. **Right-click** (or Control-click) the `.pkg` → **Open**
+2. Confirm at the prompt
+3. Enter your administrator password when the installer asks
+
+Verify the download first if you like:
+
+```bash
+shasum -a 256 Family-Safety.pkg   # compare against SHA256SUMS.txt in the release
+```
+
+The installer applies the DNS, browser and hosts-file changes, and leaves the
+configuration profile at `/Users/Shared/Family-Safety.mobileconfig` for you to
+double-click and approve — macOS does not let anything install a profile
+automatically.
+
+To undo everything, build and run the app and choose **Undo All Changes**.
 
 ## Testing
 
