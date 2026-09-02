@@ -108,9 +108,16 @@ public struct ProfileGenerator {
             settings["ServerAddresses"] = bootstrap
         }
         payload["DNSSettings"] = settings
-        // Sibling of DNSSettings, not a member of it — a common mistake.
-        // Likely only honoured under supervision; harmless either way.
-        payload["ProhibitDisablement"] = true
+        // `ProhibitDisablement` is deliberately NOT set.
+        //
+        // It requires the profile to have been installed over an MDM channel:
+        // the DNS payload validator checks `installedByMDM`, and on a Mac that
+        // is not enrolled the whole profile install fails with
+        // "unexpected error CPDomainPlugin:101".
+        //
+        // It was never doing anything useful here either — like
+        // PayloadRemovalDisallowed, it is advisory outside MDM. The control
+        // that actually keeps this in place is the child not being an admin.
         return payload
     }
 

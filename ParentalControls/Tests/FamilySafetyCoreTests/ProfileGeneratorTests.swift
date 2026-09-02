@@ -98,14 +98,33 @@ struct ProfileGeneratorTests {
         #expect(addresses.contains("2606:4700:4700::1003"))
     }
 
-    /// `ProhibitDisablement` is a sibling of `DNSSettings`, not a member of it.
-    /// Nesting it is a common mistake and silently does nothing.
-    @Test("ProhibitDisablement sits beside DNSSettings, not inside it")
-    func prohibitDisablementPlacement() throws {
+    /// Regression guard.
+    ///
+    /// `ProhibitDisablement` requires the profile to arrive over an MDM
+    /// channel: the DNS payload validator checks `installedByMDM`, and on an
+    /// un-enrolled Mac its presence fails the *entire* profile install with
+    /// "unexpected error CPDomainPlugin:101". It is also advisory outside MDM,
+    /// so it costs nothing to omit and everything to include.
+    @Test("ProhibitDisablement is never emitted")
+    func prohibitDisablementOmitted() throws {
         let (_, byType) = try payloads(ProfileGenerator(blockedSites: standardSites))
         let dns = byType["com.apple.dnsSettings.managed"]!
-        #expect(dns["ProhibitDisablement"] as? Bool == true)
+        #expect(dns["ProhibitDisablement"] == nil,
+                "this key breaks profile installation on a Mac without MDM")
         #expect((dns["DNSSettings"] as! [String: Any])["ProhibitDisablement"] == nil)
+    }
+
+    /// Nothing in the profile may require MDM enrolment, or the install fails
+    /// outright rather than degrading gracefully.
+    @Test("No payload carries a key that requires MDM enrolment")
+    func noMDMOnlyKeys() throws {
+        let (_, byType) = try payloads(ProfileGenerator(blockedSites: standardSites))
+        let mdmOnlyKeys = ["ProhibitDisablement", "PayloadRemovalDisallowedByMDM"]
+        for (type, payload) in byType {
+            for key in mdmOnlyKeys {
+                #expect(payload[key] == nil, "\(type) sets \(key), which needs MDM")
+            }
+        }
     }
 
     /// Absent means "all domains". Adding it would *narrow* enforcement to

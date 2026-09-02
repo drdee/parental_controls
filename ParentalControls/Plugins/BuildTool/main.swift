@@ -335,6 +335,9 @@ struct BuildTool: CommandPlugin {
         try? FileManager.default.removeItem(at: scripts)
         try FileManager.default.createDirectory(at: scripts, withIntermediateDirectories: true)
 
+        // Use the executable inside the bundle we just assembled. It was
+        // copied from this build's output moments ago, so it cannot be a stale
+        // artifact from an earlier run.
         let executable = app.appendingPathComponent("Contents/MacOS/\(BuildEnvironment.productName)")
         try build.run(
             url: executable,
