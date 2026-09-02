@@ -93,49 +93,51 @@ struct BuildTool: CommandPlugin {
 
     // MARK: - Publishing
 
-    /// Creates a GitHub release from the built package.
+    /// Prepares everything a release needs and prints the command to publish it.
     ///
-    /// Uses the `gh` CLI rather than the REST API directly: it already holds
-    /// the user's credentials, so the plugin never handles a token.
+    /// The publish itself cannot happen here: SwiftPM runs command plugins in a
+    /// sandbox with no network access, and there is no opt-in flag for it.
+    /// Verified directly — curl inside a plugin fails with "Could not resolve
+    /// host". So the plugin does every part it can (bump the version, build,
+    /// checksum, generate notes) and hands over a single command to run.
     private func publishRelease(_ package: URL, build: BuildEnvironment, options: Options) throws {
         let version = options.resolvedVersion
-        Log.step("Publishing \(version.tag) to \(options.repository)")
+        Log.step("Preparing release \(version.tag)")
 
-        guard let gh = try? build.plugin.tool(named: "gh") else {
-            throw BuildError.step("""
-                The GitHub CLI (gh) was not found. Install it with `brew install gh` \
-                and authenticate with `gh auth login`.
-                """)
-        }
-
-        // Refuse rather than clobber: overwriting a published release changes
-        // what people already downloaded under that version.
-        let existing = try? build.run(
-            url: gh.url,
-            ["release", "view", version.tag, "--repo", options.repository],
-            describing: "checking for an existing release"
-        )
-        if existing != nil {
-            throw BuildError.step("""
-                \(version.tag) already exists in \(options.repository). \
-                Bump the version or delete the release first.
-                """)
-        }
-
-        // Checksums let people verify a download that macOS will not vouch for.
         let checksums = try checksumFile(for: package, in: build)
-
         let notes = try releaseNotes(options: options, in: build)
-        try build.run(url: gh.url, [
-            "release", "create", version.tag,
-            package.path,
-            checksums.path,
-            "--repo", options.repository,
-            "--title", "\(version.tag) — \(options.mode.capitalized) Mode installer",
-            "--notes-file", notes.path,
-        ], describing: "creating the release")
 
-        Log.detail("released", "https://github.com/\(options.repository)/releases/tag/\(version.tag)")
+        let command = """
+            gh release create \(version.tag) \\
+              \(package.path) \\
+              \(checksums.path) \\
+              --repo \(options.repository) \\
+              --title \(BuildEnvironment.shellQuoted("\(version.tag) — \(options.mode.capitalized) Mode installer")) \\
+              --notes-file \(notes.path)
+            """
+
+        // Written to a file as well as printed, so it can simply be run.
+        let script = build.artifactsDirectory.appendingPathComponent("publish.sh")
+        try "#!/bin/bash\nset -euo pipefail\n\n\(command)\n"
+            .write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+
+        Log.detail("checksums", checksums.path)
+        Log.detail("notes", notes.path)
+        Log.detail("version", "VERSION is now \(version)")
+
+        print("""
+
+            Release \(version.tag) is ready, but SwiftPM's plugin sandbox blocks
+            network access, so the upload has to run outside the plugin:
+
+                \(script.path)
+
+            or directly:
+
+            \(command)
+
+            """)
     }
 
     private func checksumFile(for package: URL, in build: BuildEnvironment) throws -> URL {

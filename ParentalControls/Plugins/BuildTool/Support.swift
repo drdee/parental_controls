@@ -77,8 +77,11 @@ struct Options {
           --version <x.y.z>          Build this version and write it to VERSION.
           --bump                     Increment the patch number first.
                                      Implied by --publish.
-          --publish                  Create a GitHub release from the build.
-                                     Always bumps the version.
+          --publish                  Bump the version, build, and prepare a
+                                     GitHub release (checksums, notes and a
+                                     publish.sh to run). SwiftPM sandboxes
+                                     plugins without network access, so the
+                                     upload itself runs outside the plugin.
           --repo <owner/name>        Repository to publish to.
                                      Default: drdee/parental_controls.
           --identity <name>          Developer ID Application identity for the
@@ -96,9 +99,10 @@ struct Options {
           # Local build, ad-hoc signed, version unchanged
           swift package --allow-writing-to-package-directory build-family-safety
 
-          # Build and publish a new patch release to GitHub
+          # Bump the patch version and prepare a release, then publish it
           swift package --allow-writing-to-package-directory \\
             build-family-safety --publish
+          ./build/publish.sh
 
           # Release build for distribution
           swift package --allow-writing-to-package-directory build-family-safety \\
@@ -234,6 +238,11 @@ struct BuildEnvironment {
         }
         Log.detail(step, "ok")
         return combined
+    }
+
+    /// Single-quotes a value for a command a person will copy and run.
+    static func shellQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     // MARK: Reporting
