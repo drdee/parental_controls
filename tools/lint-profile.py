@@ -26,6 +26,17 @@ import subprocess
 import sys
 
 SCHEMA_REPO = "https://github.com/apple/device-management"
+
+# Keys absent from Apple's public schema that were nonetheless confirmed to
+# work: each appears in ManagedClient's own string table and in a live
+# MDM-delivered profile on a real Mac. Anything not on this list is treated as
+# an error, because an undocumented key can fail the whole install.
+UNDOCUMENTED_BUT_VERIFIED = {
+    # Both appear in ManagedClient's string table and in a live MDM-delivered
+    # profile on a real Mac. com.apple.MCX has no published schema at all.
+    "forceInternetSharingOff",
+    "DisableGuestAccount",
+}
 DEFAULT_SCHEMA_DIR = pathlib.Path("/tmp/appledm")
 
 
@@ -65,9 +76,11 @@ def key_blocks(yaml_text: str) -> dict[str, str]:
 class Support:
     """What a schema says about one key on one platform."""
 
-    def __init__(self, introduced: str, allows_manual_install: bool) -> None:
+    def __init__(self, introduced: str, allows_manual_install: bool,
+                 supervised: bool = False) -> None:
         self.introduced = introduced
         self.allows_manual_install = allows_manual_install
+        self.supervised = supervised
 
     @property
     def never_supported(self) -> bool:
@@ -95,9 +108,11 @@ def supported_platforms(block: str) -> dict[str, Support]:
         body = entry.group(2)
         introduced = re.search(r"introduced:\s*'?([^'\n]+)", body)
         manual = re.search(r"allowmanualinstall:\s*(\w+)", body)
+        supervised = re.search(r"supervised:\s*(\w+)", body)
         platforms[entry.group(1)] = Support(
             introduced=introduced.group(1).strip() if introduced else "?",
             allows_manual_install=(manual.group(1) != "false") if manual else True,
+            supervised=(supervised.group(1) == "true") if supervised else False,
         )
     return platforms
 
@@ -142,16 +157,67 @@ def lint(profile_path: pathlib.Path, schema_dir: pathlib.Path, target_os: str) -
                 )
             continue
 
-        blocks = key_blocks(schema_file.read_text())
+        schema_text = schema_file.read_text()
+
+        # Check the payload itself before its keys: a payload that macOS does
+        # not support, or that requires MDM delivery, fails the whole install
+        # regardless of which keys it carries.
+        head = schema_text.split("payloadkeys:")[0]
+        payload_platforms = supported_platforms(head)
+        if payload_platforms:
+            payload_support = payload_platforms.get(target_os)
+            if payload_support is None:
+                findings.append(
+                    Finding(
+                        "error",
+                        payload_type,
+                        f"this payload is not supported on {target_os} "
+                        f"(declared for: {', '.join(sorted(payload_platforms))})",
+                    )
+                )
+                continue
+            if payload_support.never_supported:
+                findings.append(
+                    Finding("error", payload_type,
+                            f"this payload is marked 'introduced: n/a' for {target_os}")
+                )
+                continue
+            if not payload_support.allows_manual_install:
+                findings.append(
+                    Finding("error", payload_type,
+                            "this payload has 'allowmanualinstall: false' — it requires "
+                            "MDM delivery and cannot be installed by hand")
+                )
+                continue
+            if payload_support.supervised:
+                findings.append(
+                    Finding("warning", payload_type,
+                            "this payload is marked 'supervised: true'; it may be ignored "
+                            "on a Mac that is not supervised")
+                )
+
+        blocks = key_blocks(schema_text)
 
         for key in payload:
             if key.startswith("Payload"):
                 continue
             block = blocks.get(key)
             if block is None:
-                findings.append(
-                    Finding("warning", payload_type, f"{key} is not in Apple's schema")
+                # An unknown key inside an Apple payload is an error, not a
+                # warning. `ProhibitDisablement` is absent from the schema
+                # entirely and still failed the whole install, so "not
+                # documented" cannot be treated as "probably fine".
+                #
+                # Keys verified to work despite being undocumented are listed
+                # in UNDOCUMENTED_BUT_VERIFIED below.
+                level = "warning" if key in UNDOCUMENTED_BUT_VERIFIED else "error"
+                detail = (
+                    "not in Apple's schema, but verified working on a real machine"
+                    if level == "warning"
+                    else "is not in Apple's schema for this payload — an undocumented "
+                         "key can fail the entire install"
                 )
+                findings.append(Finding(level, payload_type, f"{key} {detail}"))
                 continue
 
             platforms = supported_platforms(block)
@@ -177,6 +243,15 @@ def lint(profile_path: pathlib.Path, schema_dir: pathlib.Path, target_os: str) -
                         payload_type,
                         f"{key} is marked 'introduced: n/a' for {target_os} — "
                         "in the schema but never supported",
+                    )
+                )
+            elif support.supervised:
+                findings.append(
+                    Finding(
+                        "warning",
+                        payload_type,
+                        f"{key} is marked 'supervised: true' — likely ignored on an "
+                        "unsupervised Mac (harmless, but it does nothing)",
                     )
                 )
             elif not support.allows_manual_install:

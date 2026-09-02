@@ -165,8 +165,17 @@ public struct ProfileGenerator {
         payload["AutomaticDownload"] = true
         payload["CriticalUpdateInstall"] = true
         payload["AutomaticallyInstallMacOSUpdates"] = true
-        payload["forceDelayedMajorSoftwareUpdates"] = true
-        payload["MajorOSManagedDeferredInstallDelay"] = 90
+        // The major-OS deferral keys are deliberately NOT set here.
+        //
+        // `forceDelayedMajorSoftwareUpdates` belongs to
+        // com.apple.applicationaccess, not this payload — setting it here did
+        // nothing at all. Apple also deprecates it as of macOS 26.0, which is
+        // what these Macs run. `MajorOSManagedDeferredInstallDelay` appears in
+        // no published schema.
+        //
+        // A surprise major upgrade could reset this configuration, but the
+        // right answer is to re-run the installer after an upgrade rather than
+        // to ship a deprecated key in the wrong payload.
         return payload
     }
 

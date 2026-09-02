@@ -98,6 +98,21 @@ struct ProfileGeneratorTests {
         #expect(addresses.contains("2606:4700:4700::1003"))
     }
 
+    /// Regression guard: a key must be emitted into the payload Apple
+    /// documents it under, or it silently does nothing.
+    @Test("Software update keys are not in the wrong payload")
+    func softwareUpdateKeysAreCorrectlyPlaced() throws {
+        let (_, byType) = try payloads(ProfileGenerator(blockedSites: standardSites))
+        let update = byType["com.apple.SoftwareUpdate"]!
+        // forceDelayedMajorSoftwareUpdates belongs to
+        // com.apple.applicationaccess, and is deprecated as of macOS 26.0.
+        #expect(update["forceDelayedMajorSoftwareUpdates"] == nil)
+        // MajorOSManagedDeferredInstallDelay appears in no published schema.
+        #expect(update["MajorOSManagedDeferredInstallDelay"] == nil)
+        // The keys that do belong here are still set.
+        #expect(update["CriticalUpdateInstall"] as? Bool == true)
+    }
+
     /// Regression guard: keys marked `allowmanualinstall: false` in Apple's
     /// schema require MDM delivery and fail a manual install.
     @Test("No key requiring MDM delivery is emitted")
@@ -228,15 +243,15 @@ struct ProfileGeneratorTests {
         #expect(byType["com.apple.applicationaccess"]!["allowAirDrop"] == nil)
     }
 
-    @Test("Security updates stay enabled and major upgrades are deferred")
+    @Test("Security updates stay enabled")
     func softwareUpdatePolicy() throws {
         let (_, byType) = try payloads(ProfileGenerator(blockedSites: standardSites))
         let update = byType["com.apple.SoftwareUpdate"]!
         // An unpatched machine is a worse outcome than a slightly newer one.
         #expect(update["CriticalUpdateInstall"] as? Bool == true)
         #expect(update["AutomaticCheckEnabled"] as? Bool == true)
-        #expect(update["forceDelayedMajorSoftwareUpdates"] as? Bool == true)
-        #expect(update["MajorOSManagedDeferredInstallDelay"] as? Int == 90)
+        #expect(update["AutomaticDownload"] as? Bool == true)
+        #expect(update["AutomaticallyInstallMacOSUpdates"] as? Bool == true)
     }
 
     @Test("Guest account and internet sharing are disabled")
