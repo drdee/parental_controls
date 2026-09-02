@@ -8,8 +8,21 @@ the safe subset can be handed to other families.
 
 ```bash
 cd ParentalControls
-./Scripts/build-app.sh release
-open build/ParentalControls.app
+swift package --allow-writing-to-package-directory build-family-safety
+open build/Family-Safety.app
+```
+
+One command builds everything: the release binary, the `.app` bundle with a
+generated and linted `Info.plist`, a hardened-runtime code signature, the
+installer's `postinstall`, and the `.pkg`. It is a SwiftPM command plugin
+(`Plugins/BuildTool`), not a shell script — the build uses the same build graph
+as `swift build`, and `--allow-writing-to-package-directory` is SwiftPM's own
+sandbox asking permission to write `build/`.
+
+```bash
+swift package build-family-safety --help          # all options
+swift package --allow-writing-to-package-directory \
+  build-family-safety --mode advanced --version 2.0
 ```
 
 ## Testing
@@ -151,7 +164,7 @@ ParentalControls/
   Sources/ParentalControls/
     Core/       profile generation, privilege, preflight, verification, hardening
     Views/      SwiftUI flow: mode → configure → review → run → results
-  Scripts/build-app.sh
+  Plugins/BuildTool/            # the build, as a SwiftPM command plugin
   Resources/ONE-PAGE-GUIDE.md   for other parents
 docs/
   MANUAL-STEPS.md   Screen Time + Family Sharing (no API exists)
@@ -181,13 +194,21 @@ Verified on macOS 26.6.2:
 
 ## Signing
 
-`build-app.sh` ad-hoc signs by default and deliberately does not pick up any
-Developer ID on the machine — a corporate certificate must not end up on a
-personal app. For distribution, set a personal identity:
+The build ad-hoc signs by default and deliberately never picks up an identity
+from the keychain — a corporate certificate must not end up on a personal app
+by accident. Signing and notarization are opt-in:
 
 ```bash
-CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./Scripts/build-app.sh release
+swift package --allow-writing-to-package-directory build-family-safety \
+  --identity "Developer ID Application: Your Name (TEAMID)" \
+  --installer-identity "Developer ID Installer: Your Name (TEAMID)" \
+  --notarize --apple-id you@example.com --team-id TEAMID \
+  --notary-password "abcd-efgh-ijkl-mnop"
 ```
+
+The hardened runtime is enabled (`flags=0x10002(adhoc,runtime)`), which
+notarization requires and which — unlike the App Store sandbox — does not block
+the privileged operations this app performs.
 
 ## The honest ceiling
 

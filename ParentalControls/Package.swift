@@ -22,5 +22,21 @@ let package = Package(
             dependencies: ["FamilySafetyCore"],
             path: "Tests/FamilySafetyCoreTests"
         ),
+        // The whole build, in Swift: `swift package build-family-safety`.
+        // Writing to the package directory is required because the artifacts
+        // land in build/.
+        .plugin(
+            name: "BuildTool",
+            capability: .command(
+                intent: .custom(
+                    verb: "build-family-safety",
+                    description: "Build the app bundle and installer package"
+                ),
+                permissions: [
+                    .writeToPackageDirectory(reason: "writes the app bundle and installer to build/"),
+                ]
+            ),
+            path: "Plugins/BuildTool"
+        ),
     ]
 )
