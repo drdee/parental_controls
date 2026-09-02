@@ -1,0 +1,73 @@
+#!/bin/bash
+#
+# Pre-commit: lint staged Swift files and make sure the project still builds.
+#
+# Installed via `git config core.hooksPath .githooks`, so it lives in the repo
+# and is shared rather than sitting untracked in .git/hooks.
+#
+# Skip once with:  git commit --no-verify
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+PROJECT="$REPO_ROOT/ParentalControls"
+
+# Only Swift files that are actually staged, ignoring deletions.
+STAGED_SWIFT=$(git diff --cached --name-only --diff-filter=ACM | grep '\.swift$' || true)
+
+if [ -z "$STAGED_SWIFT" ]; then
+  exit 0
+fi
+
+echo "pre-commit: checking $(echo "$STAGED_SWIFT" | wc -l | tr -d ' ') Swift file(s)"
+
+if ! command -v swiftlint >/dev/null 2>&1; then
+  echo "pre-commit: swiftlint not found. Install it with 'brew install swiftlint'." >&2
+  echo "            To bypass this check once: git commit --no-verify" >&2
+  exit 1
+fi
+
+# Lint only the staged files, using the project config.
+#
+# Note this lints the working tree, not the staged content. That is the
+# pragmatic choice: linting the index would need a temporary checkout, and in
+# practice the two match. It does mean a partially-staged file is judged on its
+# full contents.
+FAILED=0
+cd "$PROJECT" || exit 1
+
+LINT_OUTPUT=$(
+  echo "$STAGED_SWIFT" | while read -r file; do
+    [ -n "$file" ] || continue
+    ABS="$REPO_ROOT/$file"
+    [ -f "$ABS" ] || continue
+    swiftlint lint --quiet --config "$PROJECT/.swiftlint.yml" --path "$ABS" 2>/dev/null
+  done
+)
+
+if [ -n "$LINT_OUTPUT" ]; then
+  echo "$LINT_OUTPUT"
+fi
+
+if echo "$LINT_OUTPUT" | grep -q ": error:"; then
+  echo "" >&2
+  echo "pre-commit: BLOCKED — SwiftLint reported errors above." >&2
+  echo "            Fix them, or run 'swiftlint --fix' for the mechanical ones." >&2
+  echo "            To bypass this check once: git commit --no-verify" >&2
+  FAILED=1
+fi
+
+# A commit that does not compile is worse than a lint violation.
+if command -v swift >/dev/null 2>&1; then
+  if ! BUILD_OUTPUT=$(swift build 2>&1); then
+    echo "" >&2
+    echo "pre-commit: BLOCKED — the project does not build." >&2
+    echo "$BUILD_OUTPUT" | grep -E "error:" | head -10 >&2
+    echo "            To bypass this check once: git commit --no-verify" >&2
+    FAILED=1
+  fi
+fi
+
+if [ "$FAILED" -eq 0 ]; then
+  echo "pre-commit: OK"
+fi
+exit "$FAILED"
