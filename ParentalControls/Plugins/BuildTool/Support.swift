@@ -284,6 +284,8 @@ struct InfoPlist {
             "CFBundlePackageType": "APPL",
             "CFBundleVersion": version,
             "CFBundleShortVersionString": version,
+            // Matches Package.swift. The payloads themselves work from macOS 11,
+            // but the app uses Swift features that need 14.
             "LSMinimumSystemVersion": "14.0",
             "LSApplicationCategoryType": "public.app-category.utilities",
             "NSHighResolutionCapable": true,

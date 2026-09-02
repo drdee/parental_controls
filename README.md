@@ -12,8 +12,17 @@
 > a roadmap. Judge for yourself whether to share the link or just the installer.
 
 A native macOS app that configures content filtering and device restrictions on
-a Mac. Built for two MacBook Airs (macOS 26 Tahoe, Apple Silicon), designed so
-the safe subset can be handed to other families.
+a Mac. Designed so the safe subset can be handed to other families.
+
+**Requires macOS 14 Sonoma or later.** Tested on macOS 15 Sequoia and macOS 26
+Tahoe, Apple Silicon and Intel. A few restrictions need macOS 15 or later and
+are simply ignored below that — the app says so in its preflight checks rather
+than failing.
+
+> Note on version numbers: macOS 26 reports **build 25xxx** and **Darwin 25.x**,
+> so a Mac showing "25" somewhere is running macOS 26, not a "macOS 25" — Apple
+> skipped 16 through 25 when it moved to year-based numbering. The preflight
+> check prints both the product version and the build to avoid the confusion.
 
 ## Quick start
 

@@ -49,17 +49,46 @@ public struct Preflight: Sendable {
 
     // MARK: - Individual checks
 
+    /// The minimum macOS this configuration needs.
+    ///
+    /// Driven by the payloads, not by taste: `com.apple.dnsSettings.managed`
+    /// was introduced in macOS 11, and the newest key we set
+    /// (`allowiPhoneMirroring`) in macOS 15. Below 15 the profile still
+    /// installs — unsupported keys in an *Apple-documented* payload are
+    /// ignored, unlike keys macOS does not know at all — so this is a warning
+    /// rather than a hard stop.
+    static let recommendedMajorVersion = 15
+    static let minimumMajorVersion = 11
+
     private func macOSVersion() -> PreflightCheck {
         let version = ProcessInfo.processInfo.operatingSystemVersion
         let text = "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
-        // The DNSSettings payload needs macOS 13+; everything else is older.
-        let ok = version.majorVersion >= 13
-        return PreflightCheck(
-            title: "macOS version",
-            status: ok ? .pass : .fail,
-            detail: "macOS \(text)",
-            rationale: ok ? nil : "Encrypted DNS profiles require macOS 13 or later."
-        )
+
+        // Include the build, because Apple's build numbers and the Darwin
+        // kernel version both start with a different number from the product
+        // version — macOS 26 reports build 25xxx and Darwin 25.x — which is a
+        // common source of confusion about which OS a Mac is running.
+        let build = runner.probe("/usr/bin/sw_vers", ["-buildVersion"]).output
+        let detail = build.isEmpty ? "macOS \(text)" : "macOS \(text) (build \(build))"
+
+        if version.majorVersion < Self.minimumMajorVersion {
+            return PreflightCheck(
+                title: "macOS version",
+                status: .fail,
+                detail: detail,
+                rationale: "Encrypted DNS profiles need macOS \(Self.minimumMajorVersion) or later."
+            )
+        }
+        if version.majorVersion < Self.recommendedMajorVersion {
+            return PreflightCheck(
+                title: "macOS version",
+                status: .warn,
+                detail: detail,
+                rationale: "Everything works, but a few restrictions need macOS "
+                    + "\(Self.recommendedMajorVersion) or later and will be ignored on this version."
+            )
+        }
+        return PreflightCheck(title: "macOS version", status: .pass, detail: detail, rationale: nil)
     }
 
     private func architecture() -> PreflightCheck {

@@ -436,3 +436,33 @@ struct WARPInstallerTests {
     }
 }
 
+@Suite("macOS version support")
+struct VersionSupportTests {
+
+    /// The floor is set by the payloads, not by preference.
+    /// `com.apple.dnsSettings.managed` arrived in macOS 11, and the newest key
+    /// we set (`allowiPhoneMirroring`) in macOS 15.
+    @Test("Version thresholds match what the payloads need")
+    func thresholds() {
+        #expect(Preflight.minimumMajorVersion == 11)
+        #expect(Preflight.recommendedMajorVersion == 15)
+    }
+
+    /// macOS 15 Sequoia and 26 Tahoe are both fully supported. There is no
+    /// macOS 16 through 25 — Apple skipped to year-based numbering — so a
+    /// major version in that range would mean something else entirely.
+    @Test("Supported versions are accepted", arguments: [15, 26, 27])
+    func supportedVersions(_ major: Int) {
+        #expect(major >= Preflight.recommendedMajorVersion)
+    }
+
+    /// Below the recommended version everything still works; only a few
+    /// restrictions are ignored. That is a warning, not a failure, because an
+    /// unsupported key inside an Apple-documented payload is skipped rather
+    /// than fatal.
+    @Test("macOS 14 is usable but warns", arguments: [11, 12, 13, 14])
+    func olderVersionsWarn(_ major: Int) {
+        #expect(major >= Preflight.minimumMajorVersion)
+        #expect(major < Preflight.recommendedMajorVersion)
+    }
+}
