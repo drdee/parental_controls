@@ -1,29 +1,33 @@
 import Foundation
 
 /// One environment check, shown to the user before anything is changed.
-struct PreflightCheck: Identifiable, Sendable {
-    enum Status: Sendable {
+public struct PreflightCheck: Identifiable, Sendable {
+    public enum Status: Sendable {
         case pass
         case warn
         case fail
     }
 
-    var id: String { title }
-    var title: String
-    var status: Status
-    var detail: String
+    public var id: String { title }
+    public var title: String
+    public var status: Status
+    public var detail: String
     /// Why it matters, for anything not obviously self-explanatory.
-    var rationale: String?
+    public var rationale: String?
 }
 
 /// Inspects the machine before we touch it.
 ///
 /// Nothing here mutates state; it exists so the user sees an accurate picture
 /// (and so Advanced Mode refuses to run somewhere it could do harm).
-struct Preflight: Sendable {
-    var runner: PrivilegedRunner
+public struct Preflight: Sendable {
+    public init(runner: PrivilegedRunner) {
+        self.runner = runner
+    }
 
-    func runAll(mode: RunMode) -> [PreflightCheck] {
+    public var runner: PrivilegedRunner
+
+    public func runAll(mode: RunMode) -> [PreflightCheck] {
         var checks = [
             macOSVersion(),
             architecture(),
@@ -39,7 +43,7 @@ struct Preflight: Sendable {
     }
 
     /// True if nothing outright blocks the run.
-    func canProceed(_ checks: [PreflightCheck]) -> Bool {
+    public func canProceed(_ checks: [PreflightCheck]) -> Bool {
         !checks.contains { $0.status == .fail }
     }
 
@@ -133,9 +137,9 @@ struct Preflight: Sendable {
     }
 }
 
-extension Preflight {
+public extension Preflight {
     /// Runs every check off the main thread; each one shells out.
-    func runAllAsync(mode: RunMode) async -> [PreflightCheck] {
+    public func runAllAsync(mode: RunMode) async -> [PreflightCheck] {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: runAll(mode: mode))

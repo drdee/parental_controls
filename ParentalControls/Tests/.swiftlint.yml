@@ -1,0 +1,34 @@
+# Test-specific rules.
+#
+# Nested configuration: SwiftLint applies the closest .swiftlint.yml to each
+# file, so this governs Tests/ while Sources/ keeps the stricter rules.
+
+disabled_rules:
+  - trailing_comma
+  - multiple_closures_with_trailing_closure
+  - todo
+  # Tests force-unwrap known-good fixtures on purpose: if a fixture is nil the
+  # test should fail loudly rather than silently pass. This stays an error in
+  # Sources, which runs privileged.
+  - force_unwrapping
+  # Same reasoning: `as!` on a fixture we generated ourselves.
+  - force_cast
+  - large_tuple
+  # Test suites are long by nature — many small assertions in one type.
+  - type_body_length
+  - file_length
+  # Assertion-heavy test bodies are clearer flat than decomposed.
+  - function_body_length
+
+line_length:
+  warning: 140
+  error: 300
+  ignores_comments: true
+  ignores_urls: true
+  ignores_interpolated_strings: true
+
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  excluded: [id, up, to]

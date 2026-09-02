@@ -6,6 +6,7 @@
 
 included:
   - Sources
+  - Tests
 
 excluded:
   - .build
@@ -74,9 +75,10 @@ function_body_length:
   warning: 70
   error: 120
 
+# Test suites are naturally long: many small assertions in one type.
 type_body_length:
   warning: 320
-  error: 450
+  error: 600
 
 file_length:
   warning: 450

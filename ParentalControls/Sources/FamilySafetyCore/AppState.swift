@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// Where the user is in the flow.
-enum Stage: Int, Comparable, Sendable {
+public enum Stage: Int, Comparable, Sendable {
     case chooseMode
     case configure
     case review
@@ -12,29 +12,31 @@ enum Stage: Int, Comparable, Sendable {
     case reverting
     case revertResults
 
-    static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
+    public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
 /// Outcome of a single applied step.
-struct StepResult: Identifiable, Sendable {
-    var id: String { title }
-    var title: String
-    var succeeded: Bool
-    var detail: String
+public struct StepResult: Identifiable, Sendable {
+    public var id: String { title }
+    public var title: String
+    public var succeeded: Bool
+    public var detail: String
 }
 
 @MainActor
 @Observable
-final class AppState {
+public final class AppState {
+    public init() {}
+
     // MARK: - Configuration
 
-    var stage: Stage = .chooseMode
-    var mode: RunMode = .family
-    var blockedSites: [BlockedSite] = BlockedSite.defaults
+    public var stage: Stage = .chooseMode
+    public var mode: RunMode = .family
+    public var blockedSites: [BlockedSite] = BlockedSite.defaults
 
     /// The blocklist actually applied: the editable list plus whichever
     /// presets are switched on.
-    var effectiveBlockedSites: [BlockedSite] {
+    public var effectiveBlockedSites: [BlockedSite] {
         var sites = blockedSites
         if blockSocialMedia { sites += BlockedSite.socialMedia }
         if blockAIChatbots { sites += BlockedSite.aiChatbots }
@@ -42,37 +44,37 @@ final class AppState {
         return sites
     }
 
-    var useZeroTrust = false
-    var zeroTrustURL = ""
-    var installWARP = false
+    public var useZeroTrust = false
+    public var zeroTrustURL = ""
+    public var installWARP = false
 
-    var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
-    var forceSafeSearch = true
-    var installAdBlocker = true
-    var blockThirdPartyCookies = true
-    var educationalBookmarks = true
-    var blockSocialMedia = true
-    var blockAIChatbots = true
-    var blockChatAndGaming = false
+    public var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
+    public var forceSafeSearch = true
+    public var installAdBlocker = true
+    public var blockThirdPartyCookies = true
+    public var educationalBookmarks = true
+    public var blockSocialMedia = true
+    public var blockAIChatbots = true
+    public var blockChatAndGaming = false
 
     /// Walk the whole wizard and report what *would* change, touching nothing.
     ///
     /// Worth having beyond simple caution: it is how someone decides whether to
     /// trust this app on their family's Mac in the first place.
-    var dryRun = false
+    public var dryRun = false
 
     /// Advanced-mode account creation is opt-in even within Advanced mode,
     /// because it is the only step that can lock someone out.
-    var createAccount = false
-    var accountUsername = ""
-    var accountFullName = ""
+    public var createAccount = false
+    public var accountUsername = ""
+    public var accountFullName = ""
 
-    var dnsBackend: DNSBackend {
+    public var dnsBackend: DNSBackend {
         useZeroTrust ? .zeroTrust(dohURL: zeroTrustURL) : .families
     }
 
     /// Blocking reason for the current configuration, if any.
-    var configurationError: String? {
+    public var configurationError: String? {
         if useZeroTrust, let error = dnsBackend.validationError { return error }
         if mode == .advanced, createAccount {
             let raw = accountUsername.trimmingCharacters(in: .whitespaces)
@@ -96,20 +98,20 @@ final class AppState {
 
     // MARK: - Results
 
-    var preflightChecks: [PreflightCheck] = []
-    var stepResults: [StepResult] = []
-    var verifications: [Verification] = []
-    var generatedProfileURL: URL?
-    var warpProgress: Double?
-    var runError: String?
-    var isRunning = false
+    public var preflightChecks: [PreflightCheck] = []
+    public var stepResults: [StepResult] = []
+    public var verifications: [Verification] = []
+    public var generatedProfileURL: URL?
+    public var warpProgress: Double?
+    public var runError: String?
+    public var isRunning = false
 
     // MARK: - Services
 
     private var runner: PrivilegedRunner { PrivilegedRunner(dryRun: dryRun) }
 
     /// Plain-language description of every change, for the dry-run walkthrough.
-    var changePlan: ChangePlan {
+    public var changePlan: ChangePlan {
         ChangePlan(
             mode: mode,
             backend: dnsBackend,
@@ -128,7 +130,7 @@ final class AppState {
     /// Existing local account names, so we don't offer to create a duplicate.
     private(set) var existingUsernames: Set<String> = []
 
-    func runPreflight() async {
+    public func runPreflight() async {
         let runner = self.runner
         let mode = self.mode
         preflightChecks = await Preflight(runner: runner).runAllAsync(mode: mode)
@@ -141,7 +143,7 @@ final class AppState {
         )
     }
 
-    var preflightBlocks: Bool {
+    public var preflightBlocks: Bool {
         preflightChecks.contains { $0.status == .fail }
     }
 
@@ -156,13 +158,13 @@ final class AppState {
     }
 
     /// Steps that will run, for the review screen.
-    var plannedSteps: [HardeningStep] {
+    public var plannedSteps: [HardeningStep] {
         hardening.steps(for: mode)
     }
 
     // MARK: - Apply
 
-    func apply() async {
+    public func apply() async {
         isRunning = true
         runError = nil
         stepResults = []
@@ -371,20 +373,20 @@ final class AppState {
 
     // MARK: - Revert
 
-    var revertResults: [RevertResult] = []
-    var detectedChanges: [String] = []
-    var isReverting = false
+    public var revertResults: [RevertResult] = []
+    public var detectedChanges: [String] = []
+    public var isReverting = false
 
-    var revertPlan: [String] { Reverter(runner: runner).plan() }
-    var revertWillNotUndo: [String] { Reverter(runner: runner).willNotUndo() }
+    public var revertPlan: [String] { Reverter(runner: runner).plan() }
+    public var revertWillNotUndo: [String] { Reverter(runner: runner).willNotUndo() }
 
     /// Look for evidence this tool has been run, so the confirmation screen can
     /// say what is actually present rather than guessing.
-    func detectExistingChanges() async {
+    public func detectExistingChanges() async {
         detectedChanges = await Reverter(runner: runner).detectApplied()
     }
 
-    func revertEverything() async {
+    public func revertEverything() async {
         isReverting = true
         defer { isReverting = false }
         // Never honour dry-run here: reverting is the safe direction, and a
@@ -395,7 +397,7 @@ final class AppState {
         stage = .revertResults
     }
 
-    func runVerification() async {
+    public func runVerification() async {
         // Pointless after a dry run — nothing was applied, so every check would
         // report "not working" and read as a failure rather than a no-op.
         guard !dryRun else {

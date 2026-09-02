@@ -4,12 +4,12 @@ import Foundation
 ///
 /// Single source of truth: if these drift apart, revert silently stops finding
 /// the profile it is supposed to remove.
-enum ProfileIdentity {
+public enum ProfileIdentity {
     // swiftlint:disable:next no_hardcoded_profile_identifier - canonical definition
-    static let prefix = "com.familysafety.parental"
-    static let displayName = "Family Safety"
+    public static let prefix = "com.familysafety.parental"
+    public static let displayName = "Family Safety"
     /// Substring used to recognise our profile in `profiles list` output.
-    static let listingMarker = "familysafety"
+    public static let listingMarker = "familysafety"
 }
 
 /// How much of the configuration to apply.
@@ -21,20 +21,20 @@ enum ProfileIdentity {
 ///
 /// `advanced` adds the account separation and login hardening that make the
 /// profile actually stick. Only for machines you own and can recover.
-enum RunMode: String, CaseIterable, Identifiable, Sendable {
+public enum RunMode: String, CaseIterable, Identifiable, Sendable {
     case family
     case advanced
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var title: String {
+    public var title: String {
         switch self {
         case .family:   return "Family Mode"
         case .advanced: return "Advanced Mode"
         }
     }
 
-    var subtitle: String {
+    public var subtitle: String {
         switch self {
         case .family:
             return "Content filtering only. Fully reversible — cannot lock anyone out."
@@ -45,7 +45,7 @@ enum RunMode: String, CaseIterable, Identifiable, Sendable {
 
     /// Advanced-only steps create or modify accounts, which is the one class of
     /// change that can leave someone unable to log in.
-    var touchesAccounts: Bool { self == .advanced }
+    public var touchesAccounts: Bool { self == .advanced }
 }
 
 /// Which filtering resolver to pin the machine to.
@@ -55,7 +55,7 @@ enum RunMode: String, CaseIterable, Identifiable, Sendable {
 /// adds a real social-media content category, SafeSearch, custom lists, and
 /// query logs — but it requires a Cloudflare account, and the endpoint embeds a
 /// per-account ID, so it can't be shared blindly between families.
-enum DNSBackend: Equatable, Sendable {
+public enum DNSBackend: Equatable, Sendable {
     /// Cloudflare for Families 1.1.1.3 — malware + adult content. Two fixed
     /// categories, no social-media category, no custom lists.
     case families
@@ -63,7 +63,7 @@ enum DNSBackend: Equatable, Sendable {
     /// `https://<id>.cloudflare-gateway.com/dns-query`.
     case zeroTrust(dohURL: String)
 
-    var dohURL: String {
+    public var dohURL: String {
         switch self {
         case .families:
             return "https://family.cloudflare-dns.com/dns-query"
@@ -78,7 +78,7 @@ enum DNSBackend: Equatable, Sendable {
     /// happily resolve around an IPv4-only filter. Zero Trust resolves its
     /// hostname over the normal Cloudflare anycast range, so the Families
     /// addresses are not a meaningful fallback there.
-    var bootstrapAddresses: [String] {
+    public var bootstrapAddresses: [String] {
         switch self {
         case .families:
             return ["1.1.1.3", "1.0.0.3", "2606:4700:4700::1113", "2606:4700:4700::1003"]
@@ -89,12 +89,12 @@ enum DNSBackend: Equatable, Sendable {
 
     /// Zero Trust can block social media as a category; Families cannot, so
     /// there the explicit domain lists are doing all of that work.
-    var blocksSocialMediaByCategory: Bool {
+    public var blocksSocialMediaByCategory: Bool {
         if case .zeroTrust = self { return true }
         return false
     }
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .families:  return "Cloudflare for Families (1.1.1.3)"
         case .zeroTrust: return "Cloudflare Zero Trust Gateway"
@@ -102,7 +102,7 @@ enum DNSBackend: Equatable, Sendable {
     }
 
     /// A Zero Trust endpoint we would refuse to write into a profile.
-    var validationError: String? {
+    public var validationError: String? {
         guard case .zeroTrust(let raw) = self else { return nil }
         let url = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if url.isEmpty { return "Enter your Zero Trust DoH endpoint." }
@@ -118,18 +118,18 @@ enum DNSBackend: Equatable, Sendable {
 /// `/etc/hosts` has no wildcard support, so each host has to be enumerated. The
 /// DNS layer is what actually generalises; these entries are belt-and-braces for
 /// the specific sites named up front.
-struct BlockedSite: Identifiable, Hashable, Sendable {
-    var domain: String
-    var extraHosts: [String]
+public struct BlockedSite: Identifiable, Hashable, Sendable {
+    public var domain: String
+    public var extraHosts: [String]
 
-    var id: String { domain }
+    public var id: String { domain }
 
     /// Every hostname to sinkhole in `/etc/hosts`.
-    var allHosts: [String] {
+    public var allHosts: [String] {
         [domain, "www.\(domain)"] + extraHosts
     }
 
-    init(_ domain: String, extraHosts: [String] = []) {
+    public init(_ domain: String, extraHosts: [String] = []) {
         self.domain = Self.sanitize(domain)
         self.extraHosts = extraHosts.map(Self.sanitize).filter { !$0.isEmpty }
     }
@@ -141,7 +141,7 @@ struct BlockedSite: Identifiable, Hashable, Sendable {
     /// let a crafted "domain" inject an arbitrary hosts entry — or, if it
     /// matched the heredoc delimiter, terminate it and start a new command.
     /// Quoting cannot prevent that, so the characters are removed instead.
-    static func sanitize(_ raw: String) -> String {
+    public static func sanitize(_ raw: String) -> String {
         let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789.-")
         let lowered = raw.lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -158,7 +158,7 @@ struct BlockedSite: Identifiable, Hashable, Sendable {
     }
 
     /// A hostname we are willing to write to disk.
-    var isValid: Bool {
+    public var isValid: Bool {
         !domain.isEmpty
             && domain.contains(".")
             && !domain.hasPrefix(".")
@@ -168,7 +168,7 @@ struct BlockedSite: Identifiable, Hashable, Sendable {
     }
 }
 
-extension BlockedSite {
+public extension BlockedSite {
     /// The sites the user named, with the subdomains I confirmed resolve
     /// independently (TikTok in particular serves from several).
     /// Social media, as one preset.
@@ -176,7 +176,7 @@ extension BlockedSite {
     /// On by default — these are the sites the whole exercise started from.
     /// Grouped rather than listed individually because a parent thinks in terms
     /// of "block social media", not in terms of nine hostnames.
-    static let socialMedia: [BlockedSite] = [
+    public static let socialMedia: [BlockedSite] = [
         BlockedSite("tiktok.com", extraHosts: [
             "m.tiktok.com", "vm.tiktok.com", "vt.tiktok.com", "api.tiktok.com",
         ]),
@@ -198,7 +198,7 @@ extension BlockedSite {
 
     /// The editable list starts empty: everything is now reached through the
     /// presets, and anything a parent types is added on top of them.
-    static let defaults: [BlockedSite] = []
+    public static let defaults: [BlockedSite] = []
 
     /// AI chatbots.
     ///
@@ -207,7 +207,7 @@ extension BlockedSite {
     /// content), and blocking only ChatGPT is close to meaningless now.
     /// `gemini.google.com` is the one to watch — schools using Google
     /// Workspace may need it, so it can be removed individually.
-    static let aiChatbots: [BlockedSite] = [
+    public static let aiChatbots: [BlockedSite] = [
         BlockedSite("chatgpt.com", extraHosts: [
             "chat.openai.com", "openai.com", "api.openai.com",
         ]),
@@ -226,7 +226,7 @@ extension BlockedSite {
     /// Deliberately **off** by default. Discord and Reddit have real school and
     /// club uses, and blocking them tends to produce a workaround rather than a
     /// behaviour change — better as a conversation than a silent block.
-    static let chatAndGaming: [BlockedSite] = [
+    public static let chatAndGaming: [BlockedSite] = [
         BlockedSite("discord.com", extraHosts: ["discordapp.com", "gateway.discord.gg"]),
         BlockedSite("reddit.com", extraHosts: ["old.reddit.com", "np.reddit.com"]),
         BlockedSite("roblox.com", extraHosts: ["web.roblox.com"]),
@@ -250,20 +250,20 @@ extension BlockedSite {
 /// Note this works only because Google chooses to honour it — it is a
 /// convenience, not a security boundary, and the addresses could change. Both
 /// were resolved and confirmed against Google's DNS when this was written.
-enum SafeSearch {
+public enum SafeSearch {
     /// `forcesafesearch.google.com` and `restrict.youtube.com`.
-    static let strictAddress = "216.239.38.120"
+    public static let strictAddress = "216.239.38.120"
     /// `restrictmoderate.youtube.com`.
-    static let moderateAddress = "216.239.38.119"
+    public static let moderateAddress = "216.239.38.119"
 
-    static let googleHosts = [
+    public static let googleHosts = [
         "www.google.com", "google.com",
         "www.google.co.uk", "google.co.uk",
         "www.google.ca", "google.ca",
     ]
 
     /// YouTube endpoints, including the API hosts the apps use.
-    static let youTubeHosts = [
+    public static let youTubeHosts = [
         "www.youtube.com", "m.youtube.com", "youtube.com",
         "youtubei.googleapis.com", "youtube.googleapis.com",
         "www.youtube-nocookie.com",
@@ -274,12 +274,12 @@ enum SafeSearch {
     /// Moderate is the default deliberately: strict mode blocks a great deal of
     /// legitimate educational content, which turns into a support burden and
     /// teaches them the filter is broken.
-    enum YouTubeLevel: String, CaseIterable, Identifiable, Sendable {
+    public enum YouTubeLevel: String, CaseIterable, Identifiable, Sendable {
         case off, moderate, strict
 
-        var id: String { rawValue }
+        public var id: String { rawValue }
 
-        var title: String {
+        public var title: String {
             switch self {
             case .off:      "Off"
             case .moderate: "Moderate (recommended)"
@@ -288,7 +288,7 @@ enum SafeSearch {
         }
 
         /// Chrome's `ForceYouTubeRestrict`: 0 = off, 1 = moderate, 2 = strict.
-        var chromePolicyValue: Int {
+        public var chromePolicyValue: Int {
             switch self {
             case .off:      0
             case .moderate: 1
@@ -296,7 +296,7 @@ enum SafeSearch {
             }
         }
 
-        var hostsAddress: String? {
+        public var hostsAddress: String? {
             switch self {
             case .off:      nil
             case .moderate: SafeSearch.moderateAddress
@@ -313,13 +313,13 @@ enum SafeSearch {
 /// 60-second bypass. The policy key names are identical across the family, so
 /// the same payload is emitted once per domain. A payload for a browser that
 /// is not installed is simply inert.
-struct ChromiumBrowser: Identifiable, Sendable {
-    var name: String
-    var domain: String
+public struct ChromiumBrowser: Identifiable, Sendable {
+    public var name: String
+    public var domain: String
 
-    var id: String { domain }
+    public var id: String { domain }
 
-    static let all: [Self] = [
+    public static let all: [Self] = [
         Self(name: "Google Chrome", domain: "com.google.Chrome"),
         Self(name: "Brave", domain: "com.brave.Browser"),
         Self(name: "Microsoft Edge", domain: "com.microsoft.Edge"),
@@ -336,17 +336,17 @@ struct ChromiumBrowser: Identifiable, Sendable {
 /// is an easier bypass than a native app. An ad blocker is the one exception
 /// worth making: ad networks are a real malware delivery route, so blocking
 /// them is a net security gain rather than a convenience.
-enum AllowedExtension {
+public enum AllowedExtension {
     /// uBlock Origin Lite. Verified live in the Chrome Web Store.
     ///
     /// Note this is *Lite* (Manifest V3). The original uBlock Origin was
     /// delisted with the MV2 deprecation, so its ID no longer installs.
-    static let uBlockOriginLite = "ddkjiahejlhfcafbddmgiahcphecmpfh"
+    public static let uBlockOriginLite = "ddkjiahejlhfcafbddmgiahcphecmpfh"
 
     /// Chrome expects `<id>;<update-url>` in `ExtensionInstallForcelist`.
-    static let chromeWebStoreUpdateURL = "https://clients2.google.com/service/update2/crx"
+    public static let chromeWebStoreUpdateURL = "https://clients2.google.com/service/update2/crx"
 
-    static var forcelistEntry: String {
+    public static var forcelistEntry: String {
         "\(uBlockOriginLite);\(chromeWebStoreUpdateURL)"
     }
 }
@@ -355,17 +355,17 @@ enum AllowedExtension {
 ///
 /// Chrome-only: Safari keeps bookmarks in a per-user, TCC-protected plist with
 /// no managed-preference equivalent, so there is no way to set them from here.
-struct ManagedBookmark: Sendable {
-    var name: String
-    var url: String
+public struct ManagedBookmark: Sendable {
+    public var name: String
+    public var url: String
 }
 
-extension ManagedBookmark {
-    static let folderName = "Learning"
+public extension ManagedBookmark {
+    public static let folderName = "Learning"
 
     /// Deliberately short. A long imposed list reads as homework-by-decree and
     /// gets ignored; these are genuinely useful starting points.
-    static let educational: [ManagedBookmark] = [
+    public static let educational: [ManagedBookmark] = [
         ManagedBookmark(name: "Khan Academy", url: "https://www.khanacademy.org"),
         ManagedBookmark(name: "Wikipedia", url: "https://en.wikipedia.org"),
         // Britannica was dropped: it returns 403 to non-residential clients,
@@ -380,7 +380,7 @@ extension ManagedBookmark {
 
     /// Chrome's `ManagedBookmarks` shape: an optional toplevel-name marker
     /// followed by folder/link dictionaries.
-    static func chromePolicyValue(_ bookmarks: [ManagedBookmark]) -> [[String: Any]] {
+    public static func chromePolicyValue(_ bookmarks: [ManagedBookmark]) -> [[String: Any]] {
         [[
             "name": folderName,
             "children": bookmarks.map { ["name": $0.name, "url": $0.url] },

@@ -1,4 +1,5 @@
 import SwiftUI
+import FamilySafetyCore
 
 struct ConfigureView: View {
     @Bindable var state: AppState

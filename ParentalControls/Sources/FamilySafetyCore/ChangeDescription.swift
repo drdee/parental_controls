@@ -6,8 +6,8 @@ import Foundation
 /// someone who wants to audit them and useless for everyone else. Dry run is
 /// aimed at the second group: it answers "what will this actually do to my
 /// Mac, and can I undo it?" without assuming any technical knowledge.
-struct ChangeDescription: Identifiable, Sendable {
-    enum Impact: Sendable {
+public struct ChangeDescription: Identifiable, Sendable {
+    public enum Impact: Sendable {
         /// Adds or changes a setting; nothing is lost.
         case additive
         /// Restricts something that currently works.
@@ -16,21 +16,21 @@ struct ChangeDescription: Identifiable, Sendable {
         case sensitive
     }
 
-    var id: String { title }
-    var title: String
+    public var id: String { title }
+    public var title: String
     /// What changes, in one sentence, with no jargon.
-    var whatChanges: String
+    public var whatChanges: String
     /// What the person using the Mac will notice.
-    var whatTheyWillNotice: String
+    public var whatTheyWillNotice: String
     /// How to put it back.
-    var howToUndo: String
-    var impact: Impact
+    public var howToUndo: String
+    public var impact: Impact
     /// Files or settings touched, for anyone who wants specifics.
-    var affects: [String]
+    public var affects: [String]
 }
 
-extension ChangeDescription.Impact {
-    var label: String {
+public extension ChangeDescription.Impact {
+    public var label: String {
         switch self {
         case .additive:    "Adds a setting"
         case .restrictive: "Restricts something"
@@ -38,7 +38,7 @@ extension ChangeDescription.Impact {
         }
     }
 
-    var symbolName: String {
+    public var symbolName: String {
         switch self {
         case .additive:    "plus.circle.fill"
         case .restrictive: "hand.raised.circle.fill"
@@ -52,20 +52,20 @@ extension ChangeDescription.Impact {
 /// Deliberately independent of `Hardening`: this describes *everything* that
 /// would change, including the profile payloads and the manual profile install,
 /// not just the steps that run as shell commands.
-struct ChangePlan {
-    var mode: RunMode
-    var backend: DNSBackend
-    var blockedSites: [BlockedSite]
-    var installWARP: Bool
-    var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
-    var forceSafeSearch = true
-    var installAdBlocker = true
-    var blockThirdPartyCookies = true
-    var educationalBookmarks = true
-    var createAccount: Bool
-    var accountUsername: String
+public struct ChangePlan {
+    public var mode: RunMode
+    public var backend: DNSBackend
+    public var blockedSites: [BlockedSite]
+    public var installWARP: Bool
+    public var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
+    public var forceSafeSearch = true
+    public var installAdBlocker = true
+    public var blockThirdPartyCookies = true
+    public var educationalBookmarks = true
+    public var createAccount: Bool
+    public var accountUsername: String
 
-    func descriptions() -> [ChangeDescription] {
+    public func descriptions() -> [ChangeDescription] {
         var changes: [ChangeDescription] = [dnsChange(), profileChange(), browserChange(), hostsChange()]
 
         if forceSafeSearch || youTubeLevel != .off {
@@ -95,7 +95,7 @@ struct ChangePlan {
 
     /// Nothing at all is changed until the profile is installed by hand, which
     /// is worth stating up front in a dry run.
-    var summaryLine: String {
+    public var summaryLine: String {
         let count = descriptions().count
         let sensitive = descriptions().filter { $0.impact == .sensitive }.count
         if sensitive > 0 {

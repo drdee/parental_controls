@@ -6,21 +6,37 @@ import Foundation
 /// ("profiles tool no longer supports installs"), this only *generates* the
 /// file — installation is a manual double-click plus approval in System
 /// Settings. The app walks the user through that.
-struct ProfileGenerator {
-    var blockedSites: [BlockedSite]
-    var dnsBackend: DNSBackend = .families
-    var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
-    var forceSafeSearch = true
-    var installAdBlocker = true
-    var blockThirdPartyCookies = true
-    var educationalBookmarks = true
-    var organization: String = "Family"
-    var displayName: String = ProfileIdentity.displayName
-    var identifierPrefix: String = ProfileIdentity.prefix
+public struct ProfileGenerator {
+    public init(blockedSites: [BlockedSite],
+                dnsBackend: DNSBackend = .families,
+                youTubeLevel: SafeSearch.YouTubeLevel = .moderate,
+                forceSafeSearch: Bool = true,
+                installAdBlocker: Bool = true,
+                blockThirdPartyCookies: Bool = true,
+                educationalBookmarks: Bool = true) {
+        self.blockedSites = blockedSites
+        self.dnsBackend = dnsBackend
+        self.youTubeLevel = youTubeLevel
+        self.forceSafeSearch = forceSafeSearch
+        self.installAdBlocker = installAdBlocker
+        self.blockThirdPartyCookies = blockThirdPartyCookies
+        self.educationalBookmarks = educationalBookmarks
+    }
+
+    public var blockedSites: [BlockedSite]
+    public var dnsBackend: DNSBackend = .families
+    public var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
+    public var forceSafeSearch = true
+    public var installAdBlocker = true
+    public var blockThirdPartyCookies = true
+    public var educationalBookmarks = true
+    public var organization: String = "Family"
+    public var displayName: String = ProfileIdentity.displayName
+    public var identifierPrefix: String = ProfileIdentity.prefix
 
     // MARK: - Top level
 
-    func makeProfile() -> [String: Any] {
+    public func makeProfile() -> [String: Any] {
         [
             "PayloadType": "Configuration",
             "PayloadVersion": 1,
@@ -49,7 +65,7 @@ struct ProfileGenerator {
         ]
     }
 
-    func xmlData() throws -> Data {
+    public func xmlData() throws -> Data {
         try PropertyListSerialization.data(
             fromPropertyList: makeProfile(),
             format: .xml,

@@ -7,20 +7,24 @@ import Foundation
 /// Zero Trust organisation applies policy at the device level and tunnels
 /// traffic on *any* network — which is the only thing here that reaches the
 /// phone-hotspot gap.
-struct WARPInstaller: Sendable {
-    var runner: PrivilegedRunner
+public struct WARPInstaller: Sendable {
+    public init(runner: PrivilegedRunner) {
+        self.runner = runner
+    }
+
+    public var runner: PrivilegedRunner
 
     /// Cloudflare's stable macOS channel. Redirects to a versioned .pkg.
-    static let downloadURL = URL(string: "https://downloads.cloudflareclient.com/v1/download/macos/ga")!
+    public static let downloadURL = URL(string: "https://downloads.cloudflareclient.com/v1/download/macos/ga")!
 
     /// Team identifier on Cloudflare's Developer ID installer certificate,
     /// verified against a real download. The install refuses to proceed unless
     /// the package matches this — otherwise we would be running an arbitrary
     /// downloaded installer as root.
-    static let expectedTeamID = "68WVV388M8"
-    static let expectedAuthority = "Developer ID Installer: Cloudflare Inc."
+    public static let expectedTeamID = "68WVV388M8"
+    public static let expectedAuthority = "Developer ID Installer: Cloudflare Inc."
 
-    enum Step: Sendable {
+    public enum Step: Sendable {
         case alreadyInstalled(version: String)
         case downloading(bytesReceived: Int64, bytesExpected: Int64)
         case verifying
@@ -31,7 +35,7 @@ struct WARPInstaller: Sendable {
     // MARK: - Detection
 
     /// Existing install, if any. Avoids a 150 MB download for nothing.
-    func installedVersion() -> String? {
+    public func installedVersion() -> String? {
         let path = "/Applications/Cloudflare WARP.app"
         guard FileManager.default.fileExists(atPath: path) else { return nil }
         let plist = path + "/Contents/Info.plist"
@@ -47,7 +51,7 @@ struct WARPInstaller: Sendable {
     /// Uses `URLSession.download`, which streams straight to disk — the package
     /// is ~150 MB, so neither buffering it in memory nor iterating it byte by
     /// byte is viable.
-    func download(progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+    public func download(progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
         let configuration = URLSessionConfiguration.ephemeral
         // A stalled connection should fail rather than hang the wizard forever.
         configuration.timeoutIntervalForRequest = 60
@@ -88,12 +92,12 @@ struct WARPInstaller: Sendable {
 
     // MARK: - Verification
 
-    enum InstallError: LocalizedError {
+    public enum InstallError: LocalizedError {
         case untrustedPackage(String)
         case installFailed(String)
         case downloadFailed(String)
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .untrustedPackage(let detail):
                 return "The downloaded installer is not signed by Cloudflare and was not installed. \(detail)"
@@ -109,7 +113,7 @@ struct WARPInstaller: Sendable {
     ///
     /// This runs before the package is handed to `installer` as root, so a
     /// hijacked download or a redirected URL cannot get code executed.
-    func verifySignature(of package: URL) throws {
+    public func verifySignature(of package: URL) throws {
         let result = runner.probe("/usr/sbin/pkgutil", ["--check-signature", package.path])
         let output = result.output
 
@@ -128,7 +132,7 @@ struct WARPInstaller: Sendable {
     // MARK: - Install
 
     /// Installs the verified package. Requires one admin authorization.
-    func install(package: URL) throws {
+    public func install(package: URL) throws {
         // Remove the downloaded package however this exits, so a failed or
         // rejected install does not leave a 150 MB file behind.
         defer { try? FileManager.default.removeItem(at: package) }
@@ -151,11 +155,11 @@ struct WARPInstaller: Sendable {
 private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     private let onProgress: @Sendable (Double) -> Void
 
-    init(onProgress: @escaping @Sendable (Double) -> Void) {
+    public init(onProgress: @escaping @Sendable (Double) -> Void) {
         self.onProgress = onProgress
     }
 
-    func urlSession(_ session: URLSession,
+    public func urlSession(_ session: URLSession,
                     downloadTask: URLSessionDownloadTask,
                     didWriteData bytesWritten: Int64,
                     totalBytesWritten: Int64,
@@ -164,17 +168,17 @@ private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelega
         onProgress(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
     }
 
-    func urlSession(_ session: URLSession,
+    public func urlSession(_ session: URLSession,
                     downloadTask: URLSessionDownloadTask,
                     didFinishDownloadingTo location: URL) {
         // Handled by the async/await return value.
     }
 }
 
-extension WARPInstaller {
+public extension WARPInstaller {
     /// Off-main-thread variants. `installer` can run for tens of seconds and
     /// `pkgutil --check-signature` hashes a 150 MB file.
-    func installAsync(package: URL) async throws {
+    public func installAsync(package: URL) async throws {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(with: Result { try install(package: package) })
@@ -182,7 +186,7 @@ extension WARPInstaller {
         }
     }
 
-    func installedVersionAsync() async -> String? {
+    public func installedVersionAsync() async -> String? {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: installedVersion())

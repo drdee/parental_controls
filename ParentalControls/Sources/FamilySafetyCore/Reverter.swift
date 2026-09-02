@@ -1,8 +1,8 @@
 import Foundation
 
 /// One reversal step and what it found.
-struct RevertResult: Identifiable, Sendable {
-    enum Outcome: Sendable {
+public struct RevertResult: Identifiable, Sendable {
+    public enum Outcome: Sendable {
         /// Something was there and has been undone.
         case reverted
         /// Nothing to do — this was never applied.
@@ -12,10 +12,10 @@ struct RevertResult: Identifiable, Sendable {
         case failed
     }
 
-    var id: String { title }
-    var title: String
-    var outcome: Outcome
-    var detail: String
+    public var id: String { title }
+    public var title: String
+    public var outcome: Outcome
+    public var detail: String
 }
 
 /// Undoes everything this tool applies.
@@ -25,11 +25,15 @@ struct RevertResult: Identifiable, Sendable {
 /// each step checks whether it applies, so reverting a machine that was only
 /// partly configured (or configured by an older version) still works and
 /// reports honestly instead of erroring.
-struct Reverter: Sendable {
-    var runner: PrivilegedRunner
+public struct Reverter: Sendable {
+    public init(runner: PrivilegedRunner) {
+        self.runner = runner
+    }
+
+    public var runner: PrivilegedRunner
 
     /// What reverting will do, for the confirmation screen.
-    func plan() -> [String] {
+    public func plan() -> [String] {
         [
             "Remove the Family Safety configuration profile (DNS, browser policy, restrictions).",
             "Remove the blocked-sites and SafeSearch entries from /etc/hosts and restore the backup.",
@@ -42,7 +46,7 @@ struct Reverter: Sendable {
     ///
     /// Removing an account would risk deleting a child's home folder, and
     /// uninstalling WARP may not be wanted; both are better done deliberately.
-    func willNotUndo() -> [String] {
+    public func willNotUndo() -> [String] {
         [
             "User accounts created by this tool are left alone — deleting one would remove that person's files. Remove it yourself in System Settings › Users & Groups if you want it gone.",
             "Cloudflare WARP is left installed. Uninstall it from /Applications if you no longer want it.",
@@ -53,7 +57,7 @@ struct Reverter: Sendable {
     // MARK: - Detection
 
     /// Whether anything looks applied, so the UI can avoid offering a pointless revert.
-    func detectApplied() async -> [String] {
+    public func detectApplied() async -> [String] {
         var found: [String] = []
 
         let profiles = await runner.probeAsync("/usr/bin/profiles", ["list", "-type=configuration"])
@@ -72,7 +76,7 @@ struct Reverter: Sendable {
 
     // MARK: - Revert
 
-    func revertAll() async -> [RevertResult] {
+    public func revertAll() async -> [RevertResult] {
         var results: [RevertResult] = []
         results.append(await revertHosts())
         results.append(await revertAdvancedSettings())

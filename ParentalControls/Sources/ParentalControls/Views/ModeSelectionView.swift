@@ -1,4 +1,5 @@
 import SwiftUI
+import FamilySafetyCore
 
 struct ModeSelectionView: View {
     @Bindable var state: AppState

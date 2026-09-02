@@ -4,3 +4,5 @@ build/
 *.mobileconfig
 xcuserdata/
 *.xcuserstate
+*.pkg
+pkgroot/

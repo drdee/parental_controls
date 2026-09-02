@@ -1,4 +1,5 @@
 import SwiftUI
+import FamilySafetyCore
 import AppKit
 
 /// Confirmation before undoing everything.

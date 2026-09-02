@@ -64,6 +64,18 @@ if command -v swift >/dev/null 2>&1; then
     echo "$BUILD_OUTPUT" | grep -E "error:" | head -10 >&2
     echo "            To bypass this check once: git commit --no-verify" >&2
     FAILED=1
+  else
+    # The suite runs in well under a second, so there is no reason to skip it.
+    # It covers the paths that execute as root, where a regression is worst.
+    if ! TEST_OUTPUT=$(swift test 2>&1); then
+      echo "" >&2
+      echo "pre-commit: BLOCKED — tests failed." >&2
+      echo "$TEST_OUTPUT" | grep -E "✘|error:|Test .* failed" | head -15 >&2
+      echo "            To bypass this check once: git commit --no-verify" >&2
+      FAILED=1
+    else
+      echo "pre-commit: $(echo "$TEST_OUTPUT" | grep -oE '[0-9]+ tests' | tail -1) passed"
+    fi
   fi
 fi
 

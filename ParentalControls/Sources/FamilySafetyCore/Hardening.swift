@@ -1,9 +1,9 @@
 import Foundation
 
-enum HardeningError: LocalizedError {
+public enum HardeningError: LocalizedError {
     case invalidUsername(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidUsername(let name):
             return "“\(name)” is not a usable account short name. Use lowercase letters, numbers, hyphen or underscore, starting with a letter."
@@ -17,16 +17,16 @@ enum HardeningError: LocalizedError {
 /// script executed with administrator privileges, and the home-directory
 /// argument is an unquotable bare word, so anything outside this character set
 /// is refused rather than escaped.
-struct AccountName {
-    let value: String
+public struct AccountName {
+    public let value: String
 
     /// Names macOS already uses; creating one of these would be destructive.
-    static let reserved: Set<String> = [
+    public static let reserved: Set<String> = [
         "root", "daemon", "nobody", "admin", "guest", "wheel", "staff",
         "_www", "system", "localhost",
     ]
 
-    init?(_ raw: String) {
+    public init?(_ raw: String) {
         let candidate = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789-_")
         guard !candidate.isEmpty,
@@ -43,16 +43,16 @@ struct AccountName {
 ///
 /// Every step carries the exact shell command so the review screen can show
 /// precisely what will happen — nothing is applied that the user has not seen.
-struct HardeningStep: Identifiable, Sendable {
-    var id: String { title }
-    var title: String
-    var explanation: String
-    var command: String
+public struct HardeningStep: Identifiable, Sendable {
+    public var id: String { title }
+    public var title: String
+    public var explanation: String
+    public var command: String
     /// Advanced Mode only. These touch accounts or login, and a mistake here is
     /// the one thing that can leave someone unable to log in.
-    var isAdvancedOnly: Bool
+    public var isAdvancedOnly: Bool
     /// Reverses the step, where reversal is meaningful.
-    var undoCommand: String?
+    public var undoCommand: String?
 }
 
 /// The non-profile half of the configuration.
@@ -60,26 +60,33 @@ struct HardeningStep: Identifiable, Sendable {
 /// This does more real work than the profile: many restriction keys only apply
 /// to supervised (MDM-enrolled) Macs and silently do nothing here, whereas file
 /// permissions and account privilege are enforced by the kernel regardless.
-struct Hardening: Sendable {
-    var runner: PrivilegedRunner
-    var blockedSites: [BlockedSite]
-    var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
-    var forceSafeSearch = true
+public struct Hardening: Sendable {
+    public init(runner: PrivilegedRunner, blockedSites: [BlockedSite], youTubeLevel: SafeSearch.YouTubeLevel = .moderate, forceSafeSearch: Bool = true) {
+        self.runner = runner
+        self.blockedSites = blockedSites
+        self.youTubeLevel = youTubeLevel
+        self.forceSafeSearch = forceSafeSearch
+    }
 
-    static let hostsMarkerBegin = "# BEGIN Family Safety — managed block list"
-    static let hostsMarkerEnd = "# END Family Safety"
-    static let hostsBackupPath = "/etc/hosts.familysafety.backup"
+    public var runner: PrivilegedRunner
+    public var blockedSites: [BlockedSite]
+    public var youTubeLevel: SafeSearch.YouTubeLevel = .moderate
+    public var forceSafeSearch = true
+
+    public static let hostsMarkerBegin = "# BEGIN Family Safety — managed block list"
+    public static let hostsMarkerEnd = "# END Family Safety"
+    public static let hostsBackupPath = "/etc/hosts.familysafety.backup"
     /// Heredoc delimiter. Chosen so no hostname can match it, but filtered for
     /// anyway — an entry equal to the delimiter would end the heredoc early and
     /// turn the remaining lines into root commands.
-    static let hostsHeredocDelimiter = "FAMILYSAFETY_HOSTS_EOF"
+    public static let hostsHeredocDelimiter = "FAMILYSAFETY_HOSTS_EOF"
 
     /// The exact hostnames to write: valid, sanitised, deduplicated, ordered.
     ///
     /// Deduplication matters because sites overlap — `openai.com` is listed
     /// under `chatgpt.com`, so a parent adding it explicitly would otherwise
     /// produce two identical `/etc/hosts` lines.
-    static func hostsToWrite(for sites: [BlockedSite]) -> [String] {
+    public static func hostsToWrite(for sites: [BlockedSite]) -> [String] {
         var seen = Set<String>()
         var out: [String] = []
         for host in sites.filter(\.isValid).flatMap(\.allHosts) {
@@ -96,7 +103,7 @@ struct Hardening: Sendable {
 
     // MARK: - Step list
 
-    func steps(for mode: RunMode) -> [HardeningStep] {
+    public func steps(for mode: RunMode) -> [HardeningStep] {
         var steps: [HardeningStep] = [hostsSinkhole()]
         if mode == .advanced {
             steps += [disableGuestAccount(), disableConsoleLogin(), disableRemoteLogin()]
@@ -112,7 +119,7 @@ struct Hardening: Sendable {
     /// hiccup, and covers apps that ignore browser policy. It is not a
     /// substitute for DNS filtering — `/etc/hosts` has no wildcard support, so
     /// only the hostnames listed here are affected.
-    func hostsSinkhole() -> HardeningStep {
+    public func hostsSinkhole() -> HardeningStep {
         let hosts = Self.hostsToWrite(for: blockedSites)
         var lines = hosts.map { "0.0.0.0\t\($0)" }
 
@@ -207,7 +214,7 @@ struct Hardening: Sendable {
     ///
     /// The password is passed interactively rather than on the command line, so
     /// it never appears in the process list.
-    func createStandardAccountScript(username: String, fullName: String) throws -> String {
+    public func createStandardAccountScript(username: String, fullName: String) throws -> String {
         // Validate before quoting. The home-directory path is a bare shell word
         // that cannot be safely quoted around interpolation, and a newline in
         // the username would otherwise start a new command line running as
@@ -226,7 +233,7 @@ struct Hardening: Sendable {
 
     /// Confirms an account is genuinely non-admin. Never assume the create
     /// worked — verify.
-    func verifyStandardAccount(username: String) -> (isStandard: Bool, detail: String) {
+    public func verifyStandardAccount(username: String) -> (isStandard: Bool, detail: String) {
         let result = runner.probe("/usr/sbin/dseditgroup",
                                   ["-o", "checkmember", "-m", username, "admin"])
         let output = result.output
@@ -245,7 +252,7 @@ struct Hardening: Sendable {
     /// Worth surfacing: an account with no Secure Token may be unable to log in
     /// at the pre-boot screen, so this needs testing with a real reboot before
     /// the machine is handed over.
-    func secureTokenStatus(username: String) -> String {
+    public func secureTokenStatus(username: String) -> String {
         runner.probe("/usr/sbin/sysadminctl", ["-secureTokenStatus", username]).output
     }
 
@@ -254,9 +261,9 @@ struct Hardening: Sendable {
     }
 }
 
-extension Hardening {
+public extension Hardening {
     /// Off-main-thread variants. `dseditgroup` and `sysadminctl` both block.
-    func verifyStandardAccountAsync(username: String) async -> (isStandard: Bool, detail: String) {
+    public func verifyStandardAccountAsync(username: String) async -> (isStandard: Bool, detail: String) {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: verifyStandardAccount(username: username))
@@ -264,7 +271,7 @@ extension Hardening {
         }
     }
 
-    func secureTokenStatusAsync(username: String) async -> String {
+    public func secureTokenStatusAsync(username: String) async -> String {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: secureTokenStatus(username: username))

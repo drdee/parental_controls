@@ -5,23 +5,27 @@ import Foundation
 /// These exist because several configuration-profile keys fail *silently* on an
 /// unsupervised Mac — the profile installs, reports success, and does nothing.
 /// Only a functional check tells you whether filtering is actually live.
-struct Verification: Identifiable, Sendable {
-    enum Outcome: Sendable {
+public struct Verification: Identifiable, Sendable {
+    public enum Outcome: Sendable {
         case verified
         case notWorking
         case inconclusive
     }
 
-    var id: String { title }
-    var title: String
-    var outcome: Outcome
-    var detail: String
+    public var id: String { title }
+    public var title: String
+    public var outcome: Outcome
+    public var detail: String
     /// What to do about it when it isn't working.
-    var remedy: String?
+    public var remedy: String?
 }
 
-struct Verifier: Sendable {
-    var runner: PrivilegedRunner
+public struct Verifier: Sendable {
+    public init(runner: PrivilegedRunner) {
+        self.runner = runner
+    }
+
+    public var runner: PrivilegedRunner
 
     /// A domain Cloudflare's adult-content filter is known to block. Used only
     /// as a probe — comparing a filtered resolver against an unfiltered one is
@@ -29,7 +33,7 @@ struct Verifier: Sendable {
     private static let knownBlockedDomain = "pornhub.com"
     private static let unfilteredResolver = "1.1.1.1"
 
-    func runAll(backend: DNSBackend, blockedSites: [BlockedSite]) -> [Verification] {
+    public func runAll(backend: DNSBackend, blockedSites: [BlockedSite]) -> [Verification] {
         [
             profileInstalled(),
             managedPreferencesPresent(),
@@ -146,10 +150,10 @@ struct Verifier: Sendable {
     }
 }
 
-extension Verifier {
+public extension Verifier {
     /// Runs every check off the main thread. `dig` in particular can wait on a
     /// network timeout.
-    func runAllAsync(backend: DNSBackend, blockedSites: [BlockedSite]) async -> [Verification] {
+    public func runAllAsync(backend: DNSBackend, blockedSites: [BlockedSite]) async -> [Verification] {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: runAll(backend: backend, blockedSites: blockedSites))

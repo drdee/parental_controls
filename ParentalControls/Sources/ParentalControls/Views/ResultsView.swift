@@ -1,4 +1,5 @@
 import SwiftUI
+import FamilySafetyCore
 import AppKit
 
 struct ResultsView: View {
