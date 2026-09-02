@@ -446,18 +446,18 @@ struct BuildTool: CommandPlugin {
     private func notarize(_ package: URL, build: BuildEnvironment, options: Options) async throws {
         guard let credentials = options.notaryCredentials else {
             throw BuildError.usage("""
-                --notarize needs --apple-id, --team-id and --notary-password \
-                (an app-specific password, not your Apple Account password).
+                --notarize needs credentials. Either:
+                  --notary-profile <name>   (saved with notarytool store-credentials)
+                or:
+                  --apple-id <email> --team-id <id> --notary-password <app-specific-password>
                 """)
         }
         Log.step("Submitting for notarization (this waits for Apple)")
-        try build.run("xcrun", [
-            "notarytool", "submit", package.path,
-            "--apple-id", credentials.appleID,
-            "--team-id", credentials.teamID,
-            "--password", credentials.password,
-            "--wait",
-        ], describing: "notarytool")
+        try build.run(
+            "xcrun",
+            ["notarytool", "submit", package.path, "--wait"] + credentials.arguments,
+            describing: "notarytool"
+        )
 
         Log.step("Stapling the notarization ticket")
         try build.run("xcrun", ["stapler", "staple", package.path], describing: "stapler")

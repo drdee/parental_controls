@@ -50,6 +50,11 @@ struct Options {
     var appleID: String?
     var teamID: String?
     var notaryPassword: String?
+    /// A credential profile saved by `notarytool store-credentials`.
+    ///
+    /// Preferred over passing an app-specific password as an argument, which
+    /// would leave it in shell history and in the process list.
+    var notaryProfile: String?
     var showHelp = false
 
     /// Ad-hoc signing is enough to run locally. Deliberately never picks up an
@@ -58,9 +63,26 @@ struct Options {
     var resolvedAppIdentity: String { appIdentity ?? "-" }
     var isSigned: Bool { appIdentity != nil }
 
-    var notaryCredentials: (appleID: String, teamID: String, password: String)? {
+    /// How to authenticate to the notary service.
+    enum NotaryCredentials {
+        case keychainProfile(String)
+        case appleID(id: String, team: String, password: String)
+
+        /// The corresponding `notarytool` arguments.
+        var arguments: [String] {
+            switch self {
+            case .keychainProfile(let name):
+                return ["--keychain-profile", name]
+            case .appleID(let id, let team, let password):
+                return ["--apple-id", id, "--team-id", team, "--password", password]
+            }
+        }
+    }
+
+    var notaryCredentials: NotaryCredentials? {
+        if let notaryProfile { return .keychainProfile(notaryProfile) }
         guard let appleID, let teamID, let notaryPassword else { return nil }
-        return (appleID, teamID, notaryPassword)
+        return .appleID(id: appleID, team: teamID, password: notaryPassword)
     }
 
     /// Resolved by the build; `--version` wins, else VERSION (optionally bumped).
@@ -92,7 +114,11 @@ struct Options {
                                      Requires the three options below.
           --apple-id <email>
           --team-id <id>
-          --notary-password <pw>     An app-specific password.
+          --notary-password <pw>     An app-specific password. Prefer
+                                     --notary-profile instead.
+          --notary-profile <name>    A credential profile saved earlier with
+                                     `xcrun notarytool store-credentials`.
+                                     Keeps the password out of shell history.
           --help
 
         EXAMPLES:
@@ -137,6 +163,7 @@ struct Options {
             case "--apple-id":           appleID = try value(for: argument)
             case "--team-id":            teamID = try value(for: argument)
             case "--notary-password":    notaryPassword = try value(for: argument)
+            case "--notary-profile":     notaryProfile = try value(for: argument)
             case "--skip-package":       buildPackage = false
             case "--notarize":           notarize = true
             case "--help", "-h":         showHelp = true

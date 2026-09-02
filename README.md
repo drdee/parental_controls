@@ -271,6 +271,9 @@ Verified on macOS 26.6.2:
 
 ## Signing
 
+Full walkthrough: **[docs/SIGNING.md](docs/SIGNING.md)** — enrolment,
+certificates, notarization credentials and verification.
+
 The build ad-hoc signs by default and deliberately never picks up an identity
 from the keychain — a corporate certificate must not end up on a personal app
 by accident. Signing and notarization are opt-in:
