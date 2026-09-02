@@ -139,9 +139,19 @@ final class AppState {
         preflightChecks.contains { $0.status == .fail }
     }
 
+    /// Hardening configured from the current settings.
+    private var hardening: Hardening {
+        Hardening(
+            runner: runner,
+            blockedSites: effectiveBlockedSites,
+            youTubeLevel: youTubeLevel,
+            forceSafeSearch: forceSafeSearch
+        )
+    }
+
     /// Steps that will run, for the review screen.
     var plannedSteps: [HardeningStep] {
-        Hardening(runner: runner, blockedSites: effectiveBlockedSites, youTubeLevel: youTubeLevel, forceSafeSearch: forceSafeSearch).steps(for: mode)
+        hardening.steps(for: mode)
     }
 
     // MARK: - Apply
@@ -152,8 +162,7 @@ final class AppState {
         stepResults = []
         defer { isRunning = false }
 
-        let hardening = Hardening(runner: runner, blockedSites: effectiveBlockedSites,
-                                  youTubeLevel: youTubeLevel, forceSafeSearch: forceSafeSearch)
+        let hardening = self.hardening
 
         guard await generateProfileStep() else { return }
 
