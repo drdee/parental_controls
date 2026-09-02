@@ -59,7 +59,6 @@ public struct ProfileGenerator {
                 appStorePayload(),
                 softwareUpdatePayload(),
                 mcxPayload(),
-                webContentFilterPayload(),
                 firefoxPayload(),
             ] + ChromiumBrowser.all.map(chromiumPayload),
         ]
@@ -174,19 +173,22 @@ public struct ProfileGenerator {
         return payload
     }
 
-    /// Defence in depth only, not a control: this filter is Safari/WebKit-only
-    /// and appears to require supervision to take effect. Chrome and Firefox
-    /// ignore it entirely — they get their own policy payloads below.
-    private func webContentFilterPayload() -> [String: Any] {
-        var payload = base("com.apple.webcontent-filter", "webfilter", "Web Content Filter")
-        payload["FilterType"] = "BuiltIn"
-        payload["AutoFilterEnabled"] = true
-        payload["BlacklistedURLs"] = blockedSites.flatMap { site in
-            site.allHosts.map { "https://\($0)" }
-        }
-        payload["PermittedURLs"] = [String]()
-        return payload
-    }
+    // The `com.apple.webcontent-filter` payload is deliberately NOT emitted.
+    //
+    // Its macOS handler (NetworkExtensionProfiles.profileDomainPlugin) does not
+    // recognise `FilterType: BuiltIn` — that string, along with
+    // `AutoFilterEnabled`, `BlacklistedURLs` and `PermittedURLs`, does not
+    // appear in the binary at all. They are iOS-only keys. The macOS handler
+    // knows only `PluginBundleID`, `UserName` and `Password`: it expects a
+    // third-party filter extension and requires a signingIdentifier and
+    // designatedRequirement we cannot supply.
+    //
+    // Including it failed the ENTIRE profile install with "unexpected error
+    // CPDomainPlugin:101" rather than being ignored.
+    //
+    // Nothing is lost. It only ever covered Safari/WebKit, and Safari is
+    // filtered by DNS plus Screen Time's Content & Privacy settings. Every
+    // Chromium browser and Firefox has its own policy payload, all unaffected.
 
     // MARK: - Browsers
 

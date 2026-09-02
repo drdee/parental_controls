@@ -114,6 +114,42 @@ struct ProfileGeneratorTests {
         #expect((dns["DNSSettings"] as! [String: Any])["ProhibitDisablement"] == nil)
     }
 
+    /// Pins the exact payload set.
+    ///
+    /// Two payloads have now had to be removed after failing the whole profile
+    /// install on an un-enrolled Mac. A payload that macOS cannot handle does
+    /// not degrade — it takes everything else down with it, so the set is
+    /// asserted explicitly rather than left to drift.
+    @Test("The profile contains exactly the payloads macOS can install")
+    func payloadSetIsPinned() throws {
+        let (_, byType) = try payloads(ProfileGenerator(blockedSites: standardSites))
+        let applePayloads = [
+            "com.apple.dnsSettings.managed",
+            "com.apple.applicationaccess",
+            "com.apple.appstore",
+            "com.apple.SoftwareUpdate",
+            "com.apple.MCX",
+            "org.mozilla.firefox",
+        ]
+        let expected = Set(applePayloads + ChromiumBrowser.all.map(\.domain))
+
+        #expect(Set(byType.keys) == expected,
+                "payload set changed; confirm the new payload installs without MDM")
+    }
+
+    /// `com.apple.webcontent-filter` is not emitted.
+    ///
+    /// Its macOS handler does not recognise `FilterType: BuiltIn` — that value,
+    /// and the `AutoFilterEnabled`/`BlacklistedURLs`/`PermittedURLs` keys, do
+    /// not exist in the binary. They are iOS-only. Including it fails the
+    /// entire install with "unexpected error CPDomainPlugin:101".
+    @Test("The Safari web content filter payload is never emitted")
+    func webContentFilterOmitted() throws {
+        let (_, byType) = try payloads(ProfileGenerator(blockedSites: standardSites))
+        #expect(byType["com.apple.webcontent-filter"] == nil,
+                "this payload cannot be installed on macOS and breaks the whole profile")
+    }
+
     /// Nothing in the profile may require MDM enrolment, or the install fails
     /// outright rather than degrading gracefully.
     @Test("No payload carries a key that requires MDM enrolment")

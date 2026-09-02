@@ -49,11 +49,18 @@ better conversation-starter than a silent block.
 Recording these so nobody re-adds them later believing they do something:
 
 - **`allowAppInstallation`** — an iOS/supervised key. Does nothing on macOS.
-- **`com.apple.webcontent-filter` blacklists** — Safari/WebKit only. Chrome and
-  Firefox ignore it entirely, so it is defence-in-depth at best.
+- **`com.apple.webcontent-filter`** — **cannot be used on macOS at all**, and
+  is no longer in the profile. Its handler
+  (`NetworkExtensionProfiles.profileDomainPlugin`) does not contain the string
+  `BuiltIn`, nor `AutoFilterEnabled`, `BlacklistedURLs` or `PermittedURLs` —
+  those are iOS-only keys. macOS knows only `PluginBundleID`, `UserName` and
+  `Password`: it expects a third-party filter extension with a
+  `signingIdentifier` and `designatedRequirement`. Including it failed the
+  entire profile install with `CPDomainPlugin:101`.
 - **`PayloadRemovalDisallowed`** — advisory on a non-MDM profile.
-- **`ProhibitDisablement`** — likely ignored without an MDM channel. Note this is
-  a *different* gate from supervision; see the correction below.
+- **`ProhibitDisablement`** — **requires MDM enrolment**, and is no longer in
+  the profile. The DNS payload validator checks `installedByMDM`; without it
+  the whole profile install fails. A different gate from supervision.
 - **`firmwarepasswd`** — the binary exists on Apple Silicon but is an Intel-era
   no-op. Boot security is the LocalPolicy/Secure Enclave model instead.
 - **Redirecting blocked sites to another page (e.g. Wikipedia)** — impossible
@@ -120,3 +127,18 @@ advisory — a different mechanism, not this one.
 
 The lesson worth keeping: verify the enforcement mechanism rather than trusting
 folklore about "supervised-only" keys, in either direction.
+
+## A pattern worth naming
+
+Two payload keys had to be removed after they broke installation entirely:
+`ProhibitDisablement` and the whole `com.apple.webcontent-filter` payload. Both
+had already been documented here as non-functional outside MDM, and both were
+shipped anyway on the assumption that a useless key would simply be ignored.
+
+**It is not ignored.** A payload macOS cannot handle fails the *entire* profile
+install — DNS filtering, browser policy and restrictions all die together, with
+one opaque error. There is no partial application.
+
+The test suite now pins the exact payload set for this reason, so adding a
+payload is a deliberate decision that has to be verified against a real
+un-enrolled Mac.
