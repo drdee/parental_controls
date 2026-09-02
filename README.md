@@ -12,6 +12,35 @@ cd ParentalControls
 open build/ParentalControls.app
 ```
 
+## Development
+
+```bash
+brew install swiftlint          # required by the pre-commit hook
+git config core.hooksPath .githooks   # already set in this clone
+swiftlint lint                  # 0 errors expected
+swift build
+```
+
+The pre-commit hook lints staged Swift files and refuses a commit that has lint
+errors or does not compile. Bypass with `git commit --no-verify`.
+
+`.swiftlint.yml` includes three project-specific rules that encode mistakes
+already made once: a `User`-scoped `PayloadScope` (which silently disables DNS
+filtering), a hardcoded profile identifier (which would let generation and
+revert drift apart), and an unquoted path interpolated into a privileged script
+(which allowed a newline command injection).
+
+## Undo
+
+The main screen has an **Undo All Changes** option, separate from the setup
+path. It removes the configuration profile, strips the managed block from
+`/etc/hosts`, and re-enables the Guest account and console login.
+
+It removes only its own marked block from `/etc/hosts`, so unrelated entries
+added afterwards survive — verified by round-trip test to be byte-identical to
+the original. It deliberately does **not** delete user accounts (that would
+destroy someone's home folder) or uninstall WARP, and says so on screen.
+
 ## Preview mode
 
 A switch on the first screen walks the entire wizard and changes nothing: no

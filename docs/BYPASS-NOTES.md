@@ -49,10 +49,11 @@ better conversation-starter than a silent block.
 Recording these so nobody re-adds them later believing they do something:
 
 - **`allowAppInstallation`** — an iOS/supervised key. Does nothing on macOS.
-- **`com.apple.webcontent-filter` blacklists** — Safari/WebKit only, and appears
-  to need supervision. Chrome and Firefox ignore it entirely.
+- **`com.apple.webcontent-filter` blacklists** — Safari/WebKit only. Chrome and
+  Firefox ignore it entirely, so it is defence-in-depth at best.
 - **`PayloadRemovalDisallowed`** — advisory on a non-MDM profile.
-- **`ProhibitDisablement`** — likely ignored without supervision.
+- **`ProhibitDisablement`** — likely ignored without an MDM channel. Note this is
+  a *different* gate from supervision; see the correction below.
 - **`firmwarepasswd`** — the binary exists on Apple Silicon but is an Intel-era
   no-op. Boot security is the LocalPolicy/Secure Enclave model instead.
 - **Redirecting blocked sites to another page (e.g. Wikipedia)** — impossible
@@ -78,3 +79,40 @@ Recording these so nobody re-adds them later believing they do something:
   only way to truly redirect is a root CA plus intercepting all TLS, which would
   break banking and Apple services and create a key that decrypts everything.
   **Decision: keep the clean block.**
+
+## Correction: what supervision actually gates
+
+An earlier version of this document hedged that various
+`com.apple.applicationaccess` keys "may need supervision." **That was wrong**, and
+being wrong in the cautious direction cost three real controls.
+
+macOS keeps the authoritative list at:
+
+```
+/System/Library/CoreServices/ManagedClient.app/Contents/Resources/Supervised.plist
+```
+
+`ManagedClient` strips supervision-only keys by reading **only** that file
+(`readSupervisedPrefs` / `MCXD_SupervisedPrefs`). Its complete contents are eight
+entries across two domains, and every one is Classroom-related:
+
+```
+com.apple.applicationaccess → forceClassroomAutomaticallyJoinClasses
+                              forceClassroomRequestPermissionToLeaveClasses
+                              forceClassroomUnpromptedAppAndDeviceLock
+                              forceClassroomUnpromptedScreenObservation
+com.apple.classroom         → (the same four)
+```
+
+So `allowCloudPrivateRelay`, `allowAirDrop`, `allowiPhoneMirroring`,
+`allowUIConfigurationProfileInstallation` and the rest are **not**
+supervision-gated and do apply here.
+
+There is a **separate** gate, which is the one that actually bites:
+`ManagedClient` also logs *"removing keys due to lack of MDM install"*. Some
+payloads require an MDM enrolment channel regardless of supervision. That is why
+`ProhibitDisablement` and `PayloadRemovalDisallowed` are still expected to be
+advisory — a different mechanism, not this one.
+
+The lesson worth keeping: verify the enforcement mechanism rather than trusting
+folklore about "supervised-only" keys, in either direction.
