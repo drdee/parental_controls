@@ -19,15 +19,43 @@ and find most of this list.
 | 6 | VPN app | Mostly | Non-admin can't install to `/Applications`; a system VPN extension needs admin approval. Browser extension blocklists close the easier variant. |
 | 7 | Change DNS in System Settings | **Yes** | Requires admin. Verified: the auth right is `authenticate-admin-nonshared`. |
 | 8 | Remove the profile | **Yes** (if not admin) | `PayloadRemovalDisallowed` only greys the button; an admin can still remove it, and `sudo profiles remove` works. |
-| 9 | Second admin account | Mostly | `allowLocalUserCreation=false`, guest disabled. |
+| 9 | Second admin account | **Partly** | `allowLocalUserCreation=false` blocks *creating* one, and guest is disabled. Promoting an existing account is **not** blocked — see below. |
 | 10 | Recovery Mode | **Yes** (if not admin) | Apple Silicon Recovery needs an admin/Owner password. FileVault is essential. |
 | 11 | Boot from USB | **Yes** (if not admin) | Needs an Owner credential; FileVault makes the internal disk unreadable. |
 | 12 | Tor Browser | **No** | Self-contained, runs from a home folder. A copy from a USB stick defeats everything. |
 
+## A deliberate gap: self-promotion to admin
+
+`allowAccountModification` is **not** set, by choice. Setting it would stop a
+standard user changing any account — including granting themselves admin — but
+it also blocks every legitimate account change while the profile is installed,
+down to an ordinary password change by you. That was judged too high a price.
+
+What this means concretely: **someone who learns an admin password can promote
+their own account to administrator, permanently.** Not just borrow admin for
+one dialog — make it stick, then remove the profile at leisure (#8) and undo
+everything else along with it.
+
+So the linchpin below depends on the admin password staying unknown, not on
+macOS enforcing anything. Practical consequences:
+
+- Do not type an admin password in front of them, and do not reuse a password
+  they might already know.
+- Touch ID for admin prompts is better than typing, since there is nothing to
+  shoulder-surf.
+- `dscl . -read /Groups/admin GroupMembership` lists the admin accounts. Worth
+  checking occasionally; a name that should not be there is the tell.
+
+If you would rather have the enforcement than the convenience, add
+`allowAccountModification` back to `restrictionsPayload()` in
+`ProfileGenerator.swift` — the test asserting its absence will fail, which is
+the reminder to update this section too.
+
 ## The three things that actually do the work
 
 1. **They are not an administrator.** This is the linchpin. It blocks #7, #8,
-   #10, #11 and most of #6 in one move. Everything else is secondary.
+   #10, #11 and most of #6 in one move. Everything else is secondary — and it
+   rests on the admin password staying secret, per the section above.
 2. **FileVault is on.** Without it the disk can be modified from Recovery or a
    USB boot and the rest is theatre.
 3. **Screen Time via Family Sharing.** Enforced from your device with your
@@ -115,9 +143,13 @@ So `allowCloudPrivateRelay`, `allowAirDrop`, `allowiPhoneMirroring`,
 `allowUIConfigurationProfileInstallation` and the rest are **not**
 supervision-gated and do apply here.
 
-(`allowAirDrop` is listed as evidence about the platform, not as something this
-tool sets. AirDrop restriction was deliberately dropped: it broke legitimate
-schoolwork file sharing for very little safety gain.)
+(`allowAirDrop` and `allowiPhoneMirroring` are listed as evidence about the
+platform, not as things this tool sets. Both were deliberately dropped. AirDrop
+restriction broke legitimate schoolwork file sharing for very little safety
+gain. iPhone Mirroring runs the phone's apps and browser on the phone itself,
+so nothing on this Mac filters that traffic anyway — blocking the feature here
+gives an impression of coverage it cannot deliver, and Screen Time on the phone
+is the only thing that actually helps.)
 
 There is a **separate** gate, which is the one that actually bites:
 `ManagedClient` also logs *"removing keys due to lack of MDM install"*. Some
