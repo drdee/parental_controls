@@ -280,7 +280,10 @@ struct ProfileGeneratorTests {
             #expect(policy["DnsOverHttpsMode"] as? String == "off", "\(browser.name)")
             #expect(policy["BuiltInDnsClientEnabled"] as? Bool == false, "\(browser.name)")
             #expect(policy["IncognitoModeAvailability"] as? Int == 1, "\(browser.name)")
-            #expect(policy["DeveloperToolsAvailability"] as? Int == 2, "\(browser.name)")
+            // DevTools stays available on purpose — see ProfileGenerator.
+            // Asserted as absent so re-adding it has to be a deliberate change
+            // to this test rather than something that slips back in.
+            #expect(policy["DeveloperToolsAvailability"] == nil, "\(browser.name)")
             #expect(policy["QuicAllowed"] as? Bool == false, "\(browser.name)")
             #expect((policy["ProxySettings"] as? [String: Any])?["ProxyMode"] as? String == "direct",
                     "\(browser.name)")

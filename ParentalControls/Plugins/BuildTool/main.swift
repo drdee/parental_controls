@@ -26,6 +26,10 @@ struct BuildTool: CommandPlugin {
             return
         }
 
+        // Before anything is built or the version is written, so a missing
+        // credential does not cost a full release build to discover.
+        try checkNotaryCredentials(options: options)
+
         options.resolvedVersion = try resolveVersion(
             options: options, packageDirectory: context.package.directoryURL
         )
@@ -44,10 +48,13 @@ struct BuildTool: CommandPlugin {
 
         if options.buildPackage {
             let package = try buildInstaller(build, app: app, options: options)
-            try signPackage(package, build: build, options: options)
+            signPackage(options: options)
             if options.notarize {
-                try await notarize(package, build: build, options: options)
+                Log.detail("notarization", "deferred to build/sign.sh (notarytool cannot reach the keychain or the network)")
             }
+            // Always emitted when an identity was given, so that a build
+            // without --publish still gets the script it points people at.
+            try writeSigningScript(package, build: build, options: options)
             if options.publish {
                 try publishRelease(package, build: build, options: options)
             }
@@ -61,6 +68,25 @@ struct BuildTool: CommandPlugin {
             Log.warning("""
                 This build is ad-hoc signed, so it will warn on other Macs. \
                 Pass --identity to sign with a Developer ID.
+                """)
+        } else if options.buildPackage {
+            Log.warning("""
+                The artifacts above are still ad-hoc signed. The plugin sandbox \
+                cannot reach the keychain, so run this to sign them for real:
+
+                    \(build.artifactsDirectory.appendingPathComponent("sign.sh").path)
+                """)
+        } else {
+            // --skip-package leaves no payload to sign, and sign.sh is built
+            // around rebuilding the package, so none is written.
+            Log.warning("""
+                The .app above is ad-hoc signed and no signing script was \
+                written, because --skip-package leaves no package to rebuild. \
+                Sign it directly with:
+
+                    codesign --force --options runtime --timestamp \\
+                      --sign \(BuildEnvironment.shellQuoted(options.resolvedAppIdentity)) \\
+                      \(BuildEnvironment.shellQuoted(app.path))
                 """)
         }
     }
@@ -129,29 +155,49 @@ struct BuildTool: CommandPlugin {
         return next
     }
 
-    // MARK: - Publishing
+    // MARK: - Deferred signing
 
-    /// Prepares everything a release needs and prints the command to publish it.
-    ///
-    /// The publish itself cannot happen here: SwiftPM runs command plugins in a
-    /// sandbox with no network access, and there is no opt-in flag for it.
-    /// Verified directly — curl inside a plugin fails with "Could not resolve
-    /// host". So the plugin does every part it can (bump the version, build,
-    /// checksum, generate notes) and hands over a single command to run.
     /// Writes the signing and notarization commands that must run outside the
     /// plugin sandbox, in the order they need to happen.
-    private func signingCommands(app: URL, package: URL, options: Options) -> [String] {
+    ///
+    /// None of these can run inside the plugin. SwiftPM's sandbox cuts the
+    /// plugin off from the keychain, which was verified directly rather than
+    /// inferred: inside a plugin `security find-identity -v -p codesigning`
+    /// reports "0 valid identities found" while the same command outside finds
+    /// four, `productsign` fails with "Could not find appropriate signing
+    /// identity" for an identity that is valid outside, and `notarytool` fails
+    /// while reading its credentials — before it ever reaches the network.
+    ///
+    /// The app is re-signed *inside* `payload/` rather than at the top level of
+    /// `build/`. `pkgbuild` reads the payload directory, so signing the copy in
+    /// `build/` would leave the rebuilt package still wrapping the ad-hoc app —
+    /// which is exactly what happened before this was fixed, and it would have
+    /// failed notarization for a reason the log would not have explained.
+    private func signingCommands(build: BuildEnvironment, package: URL, options: Options) -> [String] {
         guard let identity = options.appIdentity else { return [] }
+
+        let payload = build.artifactsDirectory.appendingPathComponent("payload")
+        let payloadApp = payload.appendingPathComponent("\(BuildEnvironment.appName).app")
+        let scripts = build.artifactsDirectory.appendingPathComponent("scripts")
+        let app = build.artifactsDirectory.appendingPathComponent("\(BuildEnvironment.appName).app")
+
         var commands = [
-            "# Re-sign the app with your Developer ID (the plugin could not reach the keychain)",
+            "# Re-sign the app with your Developer ID (the plugin could not reach",
+            "# the keychain). --options runtime enables the hardened runtime,",
+            "# which notarization requires.",
             "codesign --force --options runtime --timestamp \\",
             "  --sign \(BuildEnvironment.shellQuoted(identity)) \\",
-            "  \(BuildEnvironment.shellQuoted(app.path))",
+            "  \(BuildEnvironment.shellQuoted(payloadApp.path))",
+            "codesign --verify --strict \(BuildEnvironment.shellQuoted(payloadApp.path))",
+            "",
+            "# Keep the standalone bundle in step with the one being packaged.",
+            "rm -rf \(BuildEnvironment.shellQuoted(app.path))",
+            "cp -R \(BuildEnvironment.shellQuoted(payloadApp.path)) \(BuildEnvironment.shellQuoted(app.path))",
             "",
             "# Rebuild the package so it contains the signed app",
-            "pkgbuild --root \(BuildEnvironment.shellQuoted(app.deletingLastPathComponent().appendingPathComponent("payload").path)) \\",
+            "pkgbuild --root \(BuildEnvironment.shellQuoted(payload.path)) \\",
             "  --install-location /Applications \\",
-            "  --scripts \(BuildEnvironment.shellQuoted(app.deletingLastPathComponent().appendingPathComponent("scripts").path)) \\",
+            "  --scripts \(BuildEnvironment.shellQuoted(scripts.path)) \\",
             "  --identifier \(BuildEnvironment.packageIdentifier) \\",
             "  --version \(options.resolvedVersion.description) \\",
             "  \(BuildEnvironment.shellQuoted(package.path))",
@@ -163,6 +209,7 @@ struct BuildTool: CommandPlugin {
                 "productsign --sign \(BuildEnvironment.shellQuoted(installer)) \\",
                 "  \(BuildEnvironment.shellQuoted(package.path)) \(BuildEnvironment.shellQuoted(package.path + ".signed"))",
                 "mv \(BuildEnvironment.shellQuoted(package.path + ".signed")) \(BuildEnvironment.shellQuoted(package.path))",
+                "pkgutil --check-signature \(BuildEnvironment.shellQuoted(package.path))",
             ]
         }
         if options.notarize, let credentials = options.notaryCredentials {
@@ -180,6 +227,44 @@ struct BuildTool: CommandPlugin {
         return commands
     }
 
+    /// Writes a runnable script and returns its path.
+    private func writeScript(
+        _ name: String, body: [String], in build: BuildEnvironment
+    ) throws -> URL {
+        let script = build.artifactsDirectory.appendingPathComponent(name)
+        try "#!/bin/bash\nset -euo pipefail\n\n\(body.joined(separator: "\n"))\n"
+            .write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: script.path
+        )
+        return script
+    }
+
+    /// Emits `build/sign.sh` when signing or notarizing was deferred.
+    ///
+    /// Written on every build that asked for a real identity, not only when
+    /// publishing: `--identity` on its own used to log that signing had been
+    /// deferred to a file that was never created.
+    private func writeSigningScript(
+        _ package: URL, build: BuildEnvironment, options: Options
+    ) throws {
+        let commands = signingCommands(build: build, package: package, options: options)
+        guard !commands.isEmpty else { return }
+
+        let script = try writeScript("sign.sh", body: commands, in: build)
+        Log.step("Signing deferred outside the plugin sandbox")
+        Log.detail("run", script.path)
+    }
+
+    // MARK: - Publishing
+
+    /// Prepares everything a release needs and prints the command to publish it.
+    ///
+    /// The publish itself cannot happen here: SwiftPM runs command plugins in a
+    /// sandbox with no network access, and there is no opt-in flag for it.
+    /// Verified directly — curl inside a plugin fails with "Could not resolve
+    /// host". So the plugin does every part it can (bump the version, build,
+    /// checksum, generate notes) and hands over a single command to run.
     private func publishRelease(_ package: URL, build: BuildEnvironment, options: Options) throws {
         let version = options.resolvedVersion
         Log.step("Preparing release \(version.tag)")
@@ -197,14 +282,19 @@ struct BuildTool: CommandPlugin {
             """
 
         // Written to a file as well as printed, so it can simply be run.
-        // Signing has to happen here too, for the same sandbox reason.
-        let app = build.artifactsDirectory.appendingPathComponent("\(BuildEnvironment.appName).app")
-        let signing = signingCommands(app: app, package: package, options: options)
-        let script = build.artifactsDirectory.appendingPathComponent("publish.sh")
-        let body = (signing.isEmpty ? [] : signing + ["", "# Create the release"]) + [command]
-        try "#!/bin/bash\nset -euo pipefail\n\n\(body.joined(separator: "\n"))\n"
-            .write(to: script, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        // Signing has to happen here too, for the same sandbox reason — and it
+        // has to come first, because the checksum below is of the unsigned
+        // package and signing changes it. publish.sh recomputes it.
+        let signing = signingCommands(build: build, package: package, options: options)
+        let body = (signing.isEmpty ? [] : signing + [
+            "",
+            "# Refresh the checksum: signing and stapling rewrote the package.",
+            "shasum -a 256 \(BuildEnvironment.shellQuoted(package.path)) \\",
+            "  | awk '{ print $1 \"  \(package.lastPathComponent)\" }' > \(BuildEnvironment.shellQuoted(checksums.path))",
+            "",
+            "# Create the release",
+        ]) + [command]
+        let script = try writeScript("publish.sh", body: body, in: build)
 
         Log.detail("checksums", checksums.path)
         Log.detail("notes", notes.path)
@@ -375,6 +465,8 @@ struct BuildTool: CommandPlugin {
             to: macOS.appendingPathComponent(BuildEnvironment.productName)
         )
 
+        try copyIcon(into: app, build: build)
+
         let plist = app.appendingPathComponent("Contents/Info.plist")
         try InfoPlist(version: options.resolvedVersion.description).data().write(to: plist)
 
@@ -383,6 +475,50 @@ struct BuildTool: CommandPlugin {
 
         Log.detail("bundle", app.path)
         return app
+    }
+
+    /// Copies `AppIcon.icns` into the bundle, generating it if absent.
+    ///
+    /// The icon matters more here than it would for most apps: this one asks
+    /// for an administrator password, and the authorization dialog shows the
+    /// requesting app's icon. A generic binary icon on that prompt is exactly
+    /// the wrong impression.
+    ///
+    /// Generated from `tools/make-app-icon.py` rather than committed as a
+    /// binary blob, so it stays reviewable in a diff. Skipped with a warning
+    /// rather than failing the build — a missing icon is cosmetic, and it
+    /// should not stop someone building from source.
+    private func copyIcon(into app: URL, build: BuildEnvironment) throws {
+        let name = "\(InfoPlist.iconFileName).icns"
+        let source = build.plugin.package.directoryURL
+            .appendingPathComponent("Resources/Icon/\(name)")
+
+        if !FileManager.default.fileExists(atPath: source.path) {
+            let generator = build.plugin.package.directoryURL
+                .deletingLastPathComponent()
+                .appendingPathComponent("tools/make-app-icon.py")
+            guard FileManager.default.fileExists(atPath: generator.path) else {
+                Log.detail("icon", "skipped (no Resources/Icon/\(name))")
+                return
+            }
+            Log.detail("icon", "generating from tools/make-app-icon.py")
+            let iconset = build.artifactsDirectory.appendingPathComponent("AppIcon.iconset")
+            let python = try build.plugin.tool(named: "python3")
+            try build.run(url: python.url, [generator.path, "--iconset", iconset.path],
+                          describing: "rendering iconset", toolName: "make-app-icon.py")
+            try FileManager.default.createDirectory(
+                at: source.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            try build.run("iconutil", ["-c", "icns", iconset.path, "-o", source.path],
+                          describing: "building icns")
+            try? FileManager.default.removeItem(at: iconset)
+        }
+
+        try FileManager.default.copyItem(
+            at: source,
+            to: app.appendingPathComponent("Contents/Resources/\(name)")
+        )
+        Log.detail("icon", name)
     }
 
     /// Signs the app bundle.
@@ -407,7 +543,10 @@ struct BuildTool: CommandPlugin {
         try build.run("codesign", ["--verify", "--strict", app.path], describing: "verifying signature")
 
         guard options.isSigned else { return }
-        Log.detail("real signing", "deferred to build/sign.sh (keychain is unreachable from the plugin sandbox)")
+        // sign.sh is only written alongside a package, so do not name it here
+        // when --skip-package means it will not exist.
+        let destination = options.buildPackage ? "deferred to build/sign.sh" : "deferred (see the warning below)"
+        Log.detail("app signing", "\(destination) (keychain is unreachable from the plugin sandbox)")
     }
 
     /// Asks the app to emit its own `postinstall`.
@@ -481,23 +620,30 @@ struct BuildTool: CommandPlugin {
         return output
     }
 
-    private func signPackage(_ package: URL, build: BuildEnvironment, options: Options) throws {
-        guard let identity = options.installerIdentity else {
+    /// Reports how the package will be signed.
+    ///
+    /// `productsign` cannot run here for the same reason `codesign` cannot: the
+    /// plugin sandbox hides the keychain, and it fails with "Could not find
+    /// appropriate signing identity" for an identity that is valid outside.
+    /// The real command goes into `build/sign.sh`.
+    private func signPackage(options: Options) {
+        guard options.installerIdentity != nil else {
             Log.detail("package signing", "skipped (pass --installer-identity)")
             return
         }
-        Log.step("Signing package with \(identity)")
-        let signed = package.appendingPathExtension("signed")
-        try build.run("productsign", ["--sign", identity, package.path, signed.path],
-                      describing: "productsign")
-        try FileManager.default.removeItem(at: package)
-        try FileManager.default.moveItem(at: signed, to: package)
-        try build.run("pkgutil", ["--check-signature", package.path],
-                      describing: "verifying package signature")
+        Log.detail("package signing", "deferred to build/sign.sh (keychain is unreachable from the plugin sandbox)")
     }
 
-    private func notarize(_ package: URL, build: BuildEnvironment, options: Options) async throws {
-        guard let credentials = options.notaryCredentials else {
+    /// Checks that notarization has credentials to use.
+    ///
+    /// Called before the build starts rather than after the package is built:
+    /// a missing flag should not cost a full release build before it is
+    /// reported. The submission itself is deferred to `build/sign.sh` —
+    /// `notarytool` fails inside the sandbox while reading its credentials,
+    /// before it even reaches the network.
+    private func checkNotaryCredentials(options: Options) throws {
+        guard options.notarize else { return }
+        guard options.notaryCredentials != nil else {
             throw BuildError.usage("""
                 --notarize needs credentials. Either:
                   --notary-profile <name>   (saved with notarytool store-credentials)
@@ -505,15 +651,5 @@ struct BuildTool: CommandPlugin {
                   --apple-id <email> --team-id <id> --notary-password <app-specific-password>
                 """)
         }
-        Log.step("Submitting for notarization (this waits for Apple)")
-        try build.run(
-            "xcrun",
-            ["notarytool", "submit", package.path, "--wait"] + credentials.arguments,
-            describing: "notarytool"
-        )
-
-        Log.step("Stapling the notarization ticket")
-        try build.run("xcrun", ["stapler", "staple", package.path], describing: "stapler")
-        try build.run("xcrun", ["stapler", "validate", package.path], describing: "validating staple")
     }
 }

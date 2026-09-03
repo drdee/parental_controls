@@ -136,7 +136,7 @@ Apple needs an **app-specific password**, not your Apple Account password.
 ```bash
 xcrun notarytool store-credentials "familysafety" \
   --apple-id dvanliere@gmail.com \
-  --team-id YOUR_TEAM_ID \
+  --team-id 2Q9U7Y5YRD \
   --password "xxxx-xxxx-xxxx-xxxx"
 ```
 
@@ -164,11 +164,43 @@ including the parenthesised Team ID.
 The build stops on any failure, so a signing or notarization problem will not
 produce a half-signed release.
 
-**Signing runs outside the plugin.** SwiftPM's plugin sandbox blocks keychain
-access — `codesign` reports "no identity found" for an identity that works
-fine outside it. So the plugin ad-hoc signs to produce a runnable bundle and
-writes the real signing, notarization and publish steps into `build/publish.sh`
-for you to run. Same arrangement as publishing, and for the same reason.
+Without `--publish`, the same build writes `build/sign.sh` instead — signing
+and notarization, without the release upload:
+
+```bash
+swift package --allow-writing-to-package-directory build-family-safety \
+  --identity "Developer ID Application: Your Name (TEAMID)" \
+  --installer-identity "Developer ID Installer: Your Name (TEAMID)" \
+  --notarize --notary-profile familysafety
+./build/sign.sh
+```
+
+`productsign` will prompt once for keychain access to the installer key.
+Click **Always Allow** to avoid a prompt on every build.
+
+### Why signing happens outside the plugin
+
+SwiftPM's plugin sandbox cuts the plugin off from the keychain. This was
+measured from inside a plugin, not inferred:
+
+| Command inside the plugin | Result |
+|---|---|
+| `security find-identity -v -p codesigning` | `0 valid identities found` (4 outside) |
+| `productsign --sign "Developer ID Installer: …"` | `Could not find appropriate signing identity` |
+| `xcrun notarytool history --keychain-profile …` | `An error occurred while accessing the keychain` |
+
+Note that `notarytool` fails while reading its credentials — it never reaches
+the network, so the sandbox's network block is not even the binding
+constraint here.
+
+So the plugin does everything that does not need a secret (build, assemble,
+ad-hoc sign, pkgbuild, lint the profile) and writes the rest to a script.
+
+One detail worth knowing if you edit that script: it re-signs the app inside
+`build/payload/`, not `build/Family-Safety.app`. `pkgbuild` reads the payload
+directory, so signing only the top-level bundle produces a package that still
+contains the ad-hoc app — and it fails notarization with an error that does
+not say so.
 
 ## 5. Verify before sharing
 

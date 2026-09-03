@@ -111,9 +111,14 @@ public struct ChangePlan {
         return ChangeDescription(
             title: "Send all web lookups through a filtering service",
             whatChanges: "This Mac will ask \(backend.displayName) to look up website addresses, over an encrypted connection, instead of whichever service the current network provides.",
+            // Says "Wi-Fi" specifically, not "any network". The system DNS
+            // setting follows the Mac onto other Wi-Fi networks, but a phone
+            // hotspot bypasses it entirely (docs/BYPASS-NOTES.md) — and only
+            // WARP closes that gap. Claiming every network here would be the
+            // overconfidence this project is meant to avoid.
             whatTheyWillNotice: social
-                ? "Adult, malware, and social-media sites stop loading. Everything else is unchanged, including on other Wi-Fi networks."
-                : "Adult and malware sites stop loading. Everything else is unchanged, including on other Wi-Fi networks.",
+                ? "Adult, malware, and social-media sites stop loading. Everything else is unchanged, and this follows the Mac onto other Wi-Fi networks. A phone hotspot is not covered by this step."
+                : "Adult and malware sites stop loading. Everything else is unchanged, and this follows the Mac onto other Wi-Fi networks. A phone hotspot is not covered by this step.",
             howToUndo: "Remove the profile in System Settings › General › Device Management.",
             impact: .restrictive,
             affects: ["Network DNS settings (all network connections)"]
@@ -134,8 +139,8 @@ public struct ChangePlan {
     private func browserChange() -> ChangeDescription {
         ChangeDescription(
             title: "Lock browser settings that could skip the filter",
-            whatChanges: "Chrome and Firefox are told not to use their own private address-lookup feature, not to allow private/incognito windows, and not to install extensions.",
-            whatTheyWillNotice: "In Chrome and Firefox some settings appear greyed out and marked as managed. Incognito and private windows are unavailable.",
+            whatChanges: "Chrome and Firefox are told not to use their own private address-lookup feature, not to allow private/incognito windows, and to block extensions apart from a short permitted list (uBlock Origin Lite, Google Docs Offline and 1Password — none of which can proxy traffic). Browser sign-in and sync are turned off, and the browsers are stopped from using their own proxy or QUIC, each of which can carry traffic around the filter.",
+            whatTheyWillNotice: "In Chrome and Firefox some settings appear greyed out and marked as managed. Incognito and private windows are unavailable. They cannot sign in to Chrome itself, so bookmarks and history no longer sync between devices — signing in to individual websites still works. Developer tools are left available.",
             howToUndo: "Remove the profile; the browsers go back to normal on next launch.",
             impact: .restrictive,
             affects: ["Chrome policy", "Firefox policy", "Safari content filter"]

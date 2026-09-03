@@ -243,7 +243,10 @@ public struct ProfileGenerator {
         if educationalBookmarks {
             payload["ManagedBookmarks"] = ManagedBookmark.chromePolicyValue(ManagedBookmark.educational)
         }
-        payload["DeveloperToolsAvailability"] = 2  // 2 = disallowed
+        // DevTools is deliberately left available. Blocking it costs a kid
+        // learning to code View Source and Inspect Element, and it buys very
+        // little: the filter that matters is DNS-level, and someone able to
+        // bypass it via DevTools could equally use another browser.
         payload["URLBlocklist"] = chromeBlocklist()
         payload["URLAllowlist"] = [String]()
         // Firefox's proxy was locked but Chromium's was not — the same hole.

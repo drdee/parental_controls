@@ -290,6 +290,38 @@ The hardened runtime is enabled (`flags=0x10002(adhoc,runtime)`), which
 notarization requires and which — unlike the App Store sandbox — does not block
 the privileged operations this app performs.
 
+## Privacy: what this sends, and where
+
+A tool that asks for an administrator password should say what it does with
+the access. This one collects nothing:
+
+- **No analytics, telemetry, crash reporting or usage tracking.** There is no
+  SDK for any of it and no code that reports anything anywhere.
+- **No accounts, no sign-in, no server.** There is nothing to sign in to.
+- **Nothing about your family leaves the Mac.** The child's account name, the
+  chosen mode and which restrictions were applied are all applied locally and
+  never transmitted.
+- **No browsing history is collected or read.** The tool sets browser policy;
+  it does not inspect what anyone visited.
+
+The app makes exactly **one** kind of outbound connection: downloading the
+Cloudflare WARP installer from `downloads.cloudflareclient.com`, and only in
+Zero Trust mode when you ask for it. That download uses an ephemeral URL
+session, so no cookies or cache persist, and the package's signature is checked
+against Cloudflare's Developer ID before it is allowed to install.
+
+Two things do involve third parties once configured, and they are worth
+understanding:
+
+| What | Who sees what |
+|---|---|
+| DNS filtering (`1.1.1.3`) | Cloudflare resolves the Mac's DNS queries. See [Cloudflare's privacy commitments](https://developers.cloudflare.com/1.1.1.1/privacy/public-dns-resolver/). |
+| uBlock Origin Lite | Installed from the Chrome Web Store, which means Google serves the extension update check. |
+
+Those are properties of the services being configured, not of this tool
+reporting on you. Everything above is verifiable in the source — the network
+code is confined to `Sources/FamilySafetyCore/WARPInstaller.swift`.
+
 ## The honest ceiling
 
 A phone hotspot bypasses everything here and no macOS setting can prevent it.

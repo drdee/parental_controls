@@ -191,6 +191,11 @@ struct Options {
         if notarize, installerIdentity == nil {
             throw BuildError.usage("--notarize requires --installer-identity: Apple will not notarize an unsigned package.")
         }
+        // There is nothing to notarize without a package, and the signing
+        // script is built around one.
+        if notarize, !buildPackage {
+            throw BuildError.usage("--notarize needs the package; remove --skip-package.")
+        }
     }
 }
 
@@ -302,6 +307,10 @@ struct BuildEnvironment {
 struct InfoPlist {
     var version: String
 
+    /// `AppIcon.icns`, minus the extension — the form CFBundleIconFile wants.
+    static let iconFileName = "AppIcon"
+    static let copyright = "Family Safety Setup is free software. No warranty."
+
     var values: [String: Any] {
         [
             "CFBundleName": "Family Safety Setup",
@@ -315,6 +324,12 @@ struct InfoPlist {
             // but the app uses Swift features that need 14.
             "LSMinimumSystemVersion": "14.0",
             "LSApplicationCategoryType": "public.app-category.utilities",
+            // Shown in Get Info and the About panel.
+            "NSHumanReadableCopyright": Self.copyright,
+            // Without an icon the authorization dialog asks for an admin
+            // password on behalf of a nameless generic binary, which is
+            // exactly the wrong impression for a tool doing this much.
+            "CFBundleIconFile": Self.iconFileName,
             "NSHighResolutionCapable": true,
             // A setup tool has no business restoring windows on relaunch.
             "NSSupportsAutomaticTermination": false,
