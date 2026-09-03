@@ -140,13 +140,23 @@ public struct ProfileGenerator {
         // Content & Privacy settings — see docs/MANUAL-STEPS.md.
         payload["allowLocalUserCreation"] = false
         payload["allowStartupDiskModification"] = false
-        payload["allowAccountModification"] = false
+        // allowAccountModification is deliberately absent. It would stop a
+        // standard user promoting themselves to admin, but it also blocks
+        // every legitimate account change -- including an ordinary password
+        // change by the parent -- for as long as the profile is installed.
+        // That cost was judged too high for a control that only holds against
+        // someone who does not already know an admin password. See
+        // docs/BYPASS-NOTES.md, which ranks this honestly.
+        //
+        // allowiPhoneMirroring is likewise absent: mirrored apps run on the
+        // phone and are outside anything this Mac can filter, so the phone is
+        // where that has to be handled.
+        //
         // Verified against /System/Library/CoreServices/ManagedClient.app/
         // Contents/Resources/Supervised.plist: the only supervision-gated keys
         // in this domain are the four forceClassroom* ones, so these all apply
         // on an unsupervised Mac.
         payload["allowUIConfigurationProfileInstallation"] = false
-        payload["allowiPhoneMirroring"] = false
         return payload
     }
 
@@ -289,16 +299,34 @@ public struct ProfileGenerator {
         payload["DisablePrivateBrowsing"] = true
         payload["BlockAboutConfig"] = true
         payload["BlockAboutProfiles"] = true
-        payload["DisableDeveloperTools"] = true
+        // DisableDeveloperTools is deliberately absent, matching the Chromium
+        // payload. Blocking the inspector costs a kid learning to code View
+        // Source and the console, and buys little: the filter that matters is
+        // DNS-level, and anyone able to bypass it that way could use another
+        // browser. Leaving it set for Firefox while Chrome is open would also
+        // be an inconsistency nobody reading this later could explain.
         payload["WebsiteFilter"] = [
             "Block": blockedSites.flatMap { site in
                 ([site.domain] + site.extraHosts).map { "*://*.\($0)/*" }
             },
             "Exceptions": [String](),
         ]
-        payload["ExtensionSettings"] = [
-            "*": ["installation_mode": "blocked"],
-        ]
+        // Mirrors the Chromium allowlist rather than blocking everything, so a
+        // password manager and an ad blocker work in whichever browser is
+        // used. Default-deny with named exceptions, same shape as Chromium:
+        // "*" is blocked, then each permitted add-on is allowed by ID.
+        //
+        // Note the IDs differ from Chrome's, and Google Docs Offline has no
+        // Firefox build at all -- see AllowedExtension.
+        var extensions: [String: Any] = ["*": ["installation_mode": "blocked"]]
+        var permitted = [AllowedExtension.firefoxOnePassword]
+        if installAdBlocker {
+            permitted.append(AllowedExtension.firefoxUBlockOrigin)
+        }
+        for identifier in permitted {
+            extensions[identifier] = ["installation_mode": "allowed"]
+        }
+        payload["ExtensionSettings"] = extensions
         return payload
     }
 }

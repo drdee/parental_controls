@@ -220,11 +220,18 @@ struct ProfileGeneratorTests {
             "allowCloudPrivateRelay",
             "allowLocalUserCreation",
             "allowStartupDiskModification",
-            "allowAccountModification",
             "allowUIConfigurationProfileInstallation",
-            "allowiPhoneMirroring",
         ] {
             #expect(access[key] as? Bool == false, "\(key) should be false")
+        }
+
+        // Both were dropped deliberately, not lost. allowAccountModification
+        // blocked every legitimate password change for as long as the profile
+        // was installed; allowiPhoneMirroring guards a route that has to be
+        // handled on the phone anyway. Asserted absent so either one coming
+        // back has to be a deliberate edit to this test.
+        for key in ["allowAccountModification", "allowiPhoneMirroring"] {
+            #expect(access[key] == nil, "\(key) should not be emitted")
         }
     }
 
@@ -312,6 +319,43 @@ struct ProfileGeneratorTests {
 
         #expect(firefox["DisablePrivateBrowsing"] as? Bool == true)
         #expect(firefox["BlockAboutProfiles"] as? Bool == true)
+
+        // Developer tools stay available, matching Chromium. Blocking the
+        // inspector in one browser but not the other would be an
+        // inconsistency nobody could explain later.
+        #expect(firefox["DisableDeveloperTools"] == nil)
+    }
+
+    @Test("Firefox extensions are default-deny with the same exceptions as Chrome")
+    func firefoxExtensionAllowlist() throws {
+        let (_, byType) = try payloads(
+            ProfileGenerator(blockedSites: standardSites, installAdBlocker: true)
+        )
+        let settings = byType["org.mozilla.firefox"]!["ExtensionSettings"] as! [String: Any]
+
+        let blanket = settings["*"] as! [String: Any]
+        #expect(blanket["installation_mode"] as? String == "blocked")
+
+        // Firefox add-on IDs are not Chrome Web Store IDs, so these are
+        // separate constants; getting them wrong fails open in the sense that
+        // the add-on simply cannot be installed.
+        for identifier in [AllowedExtension.firefoxUBlockOrigin,
+                           AllowedExtension.firefoxOnePassword] {
+            let entry = settings[identifier] as? [String: Any]
+            #expect(entry?["installation_mode"] as? String == "allowed", "\(identifier)")
+        }
+    }
+
+    @Test("Turning the ad blocker off drops it from the Firefox allowlist too")
+    func firefoxAdBlockerOptional() throws {
+        let (_, byType) = try payloads(
+            ProfileGenerator(blockedSites: standardSites, installAdBlocker: false)
+        )
+        let settings = byType["org.mozilla.firefox"]!["ExtensionSettings"] as! [String: Any]
+
+        #expect(settings[AllowedExtension.firefoxUBlockOrigin] == nil)
+        // The password manager is not a content control, so it stays either way.
+        #expect(settings[AllowedExtension.firefoxOnePassword] != nil)
     }
 
     @Test("Blocklists cover alternate hosts, not just the top-level domain")

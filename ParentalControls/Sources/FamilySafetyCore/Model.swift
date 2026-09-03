@@ -376,6 +376,30 @@ public enum AllowedExtension {
     /// Permitted even when the ad blocker is turned off, since these exist to
     /// avoid breaking legitimate use rather than to add protection.
     public static let alwaysAllowedIdentifiers = [googleDocsOffline, onePassword]
+
+    // MARK: - Firefox
+
+    /// Firefox add-on IDs for the same extensions.
+    ///
+    /// Firefox does not use Chrome Web Store identifiers — add-ons are keyed
+    /// by an email-style ID or a GUID — so the constants above cannot be
+    /// reused and these are listed separately.
+    ///
+    /// There is no Google Docs Offline for Firefox; it is a Chrome-only
+    /// extension. Offline editing of Docs therefore is not available in
+    /// Firefox whatever this policy says, which is a Google limitation rather
+    /// than something this profile imposes.
+    public static let firefoxUBlockOrigin = "uBlock0@raymondhill.net"
+    public static let firefoxOnePassword = "{d634138d-c276-4fc8-924b-40a0ea21d284}"
+
+    /// The Firefox equivalent of `allowedIdentifiers`.
+    ///
+    /// Firefox keeps full uBlock Origin rather than the Lite build: the
+    /// Manifest V2 deprecation that forced Chrome onto Lite does not apply
+    /// here, so the more capable version is still installable.
+    public static var firefoxAllowedIdentifiers: [String] {
+        [firefoxUBlockOrigin, firefoxOnePassword]
+    }
 }
 
 
