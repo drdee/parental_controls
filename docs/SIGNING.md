@@ -68,7 +68,48 @@ Distribution outside the App Store needs both:
 | **Developer ID Application** | the `.app` bundle |
 | **Developer ID Installer** | the `.pkg` |
 
-Easiest route — let Xcode do it:
+### If Xcode does not offer "Developer ID"
+
+The **+** menu only lists certificate types Xcode believes your team is
+entitled to, and it caches that judgement. Check what it currently thinks:
+
+```bash
+defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier \
+  | grep -E "teamID|teamName|teamType|isFree"
+```
+
+`teamType = "Personal Team"` with `isFreeProvisioningTeam = 1` means Xcode sees
+a **free** Apple ID. A free team can only issue *Apple Development* certificates
+— which is precisely the symptom. A paid membership reports
+`isFreeProvisioningTeam = 0`.
+
+Three causes, in order of likelihood:
+
+1. **Xcode has cached stale team data.** Quit Xcode, remove the account under
+   Settings → Accounts, reopen and sign in again. Refreshing alone is often not
+   enough.
+2. **Enrolment is still processing.** Check Membership Details at
+   <https://developer.apple.com/account>. "Pending" means wait; approval is
+   usually hours but can be a couple of days.
+3. **The paid membership is on a different Apple ID** from the one Xcode is
+   signed into. Confirm the email on the developer portal matches.
+
+**Bypass Xcode entirely** — this works as soon as the membership is active and
+avoids the caching problem:
+
+```bash
+tools/make-csr.sh "Diederik van Liere" dvanliere@gmail.com
+```
+
+Then upload the request at
+<https://developer.apple.com/account/resources/certificates/add>, once for
+*Developer ID Application* and once for *Developer ID Installer*. Download each
+`.cer` and double-click to install.
+
+If that page does not offer "Developer ID Application", the membership is not
+active — no amount of local fiddling will help, and that is the thing to fix.
+
+### Easiest route — let Xcode do it:
 
 1. Xcode → Settings → Accounts → **+** → Apple ID → sign in with your personal
    Apple Account.
