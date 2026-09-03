@@ -1,10 +1,8 @@
 # macOS Parental Controls
 
-> **Not notarized yet.** macOS refuses to open an unsigned `.pkg` at all —
-> right-click → Open works for apps but **not** for installer packages, and
-> clearing the quarantine flag does not help either. Install with
-> `sudo installer -pkg … -target /`, or build from source (one command). See
-> [Installing the release](#installing-the-release).
+> **Signed and notarized.** Download the `.pkg` from the
+> [latest release](https://github.com/drdee/parental_controls/releases/latest)
+> and double-click it.
 
 > **`docs/BYPASS-NOTES.md` documents how to defeat this tool.** That is
 > deliberate: knowing the gaps is more useful to a parent than believing the
@@ -50,22 +48,18 @@ swift package --allow-writing-to-package-directory \
 Download `Family-Safety.pkg` from the
 [latest release](https://github.com/drdee/parental_controls/releases/latest).
 
-Because it is not notarized, **double-clicking fails** with _"cannot verify
-this app is free of malware"_, and there is no click-through: the right-click →
-Open trick works for `.app` bundles but not for `.pkg` installers. Removing the
-quarantine attribute does not help — the missing signature is what Gatekeeper
-objects to (`spctl -a -t install` reports `source=no usable signature` either
-way).
-
-Verify the download, then install from Terminal. `/usr/sbin/installer` does not
-consult Gatekeeper:
+From **v1.0.9** onwards the package is signed with a Developer ID and
+notarized by Apple, so double-clicking works. Verifying the checksum first is
+still worth the second it takes:
 
 ```bash
 shasum -a 256 ~/Downloads/Family-Safety.pkg   # compare against SHA256SUMS.txt
-sudo installer -pkg ~/Downloads/Family-Safety.pkg -target /
 ```
 
-Or build from source, which is never quarantined and avoids the issue:
+Releases before v1.0.9 were not notarized and have been removed, so this is
+the only published installer.
+
+Or build from source, which is never quarantined:
 
 ```bash
 swift package --allow-writing-to-package-directory build-family-safety
