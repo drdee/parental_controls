@@ -91,6 +91,26 @@ struct BuildTool: CommandPlugin {
         }
     }
 
+    /// Locates a Python the plugin sandbox can actually execute.
+    ///
+    /// `context.tool(named: "python3")` searches PATH, which on a machine
+    /// using a version manager returns a shim rather than a real interpreter.
+    /// A mise shim fails inside the plugin sandbox with
+    /// "mise ERROR Operation not permitted (os error 1)" — it wants to consult
+    /// config and re-exec, and the sandbox denies both. The build then died at
+    /// profile linting on the maintainer's machine while working fine on a
+    /// machine without mise, which is the worst kind of build bug.
+    ///
+    /// `/usr/bin/python3` ships with macOS and is not a shim, so it is
+    /// preferred. Falls back to PATH lookup if it is ever absent.
+    static func python3(_ build: BuildEnvironment) throws -> URL {
+        let system = URL(fileURLWithPath: "/usr/bin/python3")
+        if FileManager.default.isExecutableFile(atPath: system.path) {
+            return system
+        }
+        return try build.plugin.tool(named: "python3").url
+    }
+
     /// Checks the generated profile against Apple's published schemas.
     ///
     /// Three payload keys and one whole payload have had to be removed after
@@ -108,9 +128,8 @@ struct BuildTool: CommandPlugin {
             return
         }
 
-        let python = try build.plugin.tool(named: "python3")
         let process = Process()
-        process.executableURL = python.url
+        process.executableURL = try Self.python3(build)
         process.arguments = [linter.path, profile.path]
         let output = Pipe()
         process.standardOutput = output
@@ -503,8 +522,8 @@ struct BuildTool: CommandPlugin {
             }
             Log.detail("icon", "generating from tools/make-app-icon.py")
             let iconset = build.artifactsDirectory.appendingPathComponent("AppIcon.iconset")
-            let python = try build.plugin.tool(named: "python3")
-            try build.run(url: python.url, [generator.path, "--iconset", iconset.path],
+            try build.run(url: Self.python3(build),
+                          [generator.path, "--iconset", iconset.path],
                           describing: "rendering iconset", toolName: "make-app-icon.py")
             try FileManager.default.createDirectory(
                 at: source.deletingLastPathComponent(), withIntermediateDirectories: true
