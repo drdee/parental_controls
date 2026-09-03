@@ -138,6 +138,48 @@ struct BuildTool: CommandPlugin {
     /// Verified directly — curl inside a plugin fails with "Could not resolve
     /// host". So the plugin does every part it can (bump the version, build,
     /// checksum, generate notes) and hands over a single command to run.
+    /// Writes the signing and notarization commands that must run outside the
+    /// plugin sandbox, in the order they need to happen.
+    private func signingCommands(app: URL, package: URL, options: Options) -> [String] {
+        guard let identity = options.appIdentity else { return [] }
+        var commands = [
+            "# Re-sign the app with your Developer ID (the plugin could not reach the keychain)",
+            "codesign --force --options runtime --timestamp \\",
+            "  --sign \(BuildEnvironment.shellQuoted(identity)) \\",
+            "  \(BuildEnvironment.shellQuoted(app.path))",
+            "",
+            "# Rebuild the package so it contains the signed app",
+            "pkgbuild --root \(BuildEnvironment.shellQuoted(app.deletingLastPathComponent().appendingPathComponent("payload").path)) \\",
+            "  --install-location /Applications \\",
+            "  --scripts \(BuildEnvironment.shellQuoted(app.deletingLastPathComponent().appendingPathComponent("scripts").path)) \\",
+            "  --identifier \(BuildEnvironment.packageIdentifier) \\",
+            "  --version \(options.resolvedVersion.description) \\",
+            "  \(BuildEnvironment.shellQuoted(package.path))",
+        ]
+        if let installer = options.installerIdentity {
+            commands += [
+                "",
+                "# Sign the package",
+                "productsign --sign \(BuildEnvironment.shellQuoted(installer)) \\",
+                "  \(BuildEnvironment.shellQuoted(package.path)) \(BuildEnvironment.shellQuoted(package.path + ".signed"))",
+                "mv \(BuildEnvironment.shellQuoted(package.path + ".signed")) \(BuildEnvironment.shellQuoted(package.path))",
+            ]
+        }
+        if options.notarize, let credentials = options.notaryCredentials {
+            let arguments = credentials.arguments
+                .map(BuildEnvironment.shellQuoted)
+                .joined(separator: " ")
+            commands += [
+                "",
+                "# Notarize and staple",
+                "xcrun notarytool submit \(BuildEnvironment.shellQuoted(package.path)) --wait \(arguments)",
+                "xcrun stapler staple \(BuildEnvironment.shellQuoted(package.path))",
+                "xcrun stapler validate \(BuildEnvironment.shellQuoted(package.path))",
+            ]
+        }
+        return commands
+    }
+
     private func publishRelease(_ package: URL, build: BuildEnvironment, options: Options) throws {
         let version = options.resolvedVersion
         Log.step("Preparing release \(version.tag)")
@@ -155,8 +197,12 @@ struct BuildTool: CommandPlugin {
             """
 
         // Written to a file as well as printed, so it can simply be run.
+        // Signing has to happen here too, for the same sandbox reason.
+        let app = build.artifactsDirectory.appendingPathComponent("\(BuildEnvironment.appName).app")
+        let signing = signingCommands(app: app, package: package, options: options)
         let script = build.artifactsDirectory.appendingPathComponent("publish.sh")
-        try "#!/bin/bash\nset -euo pipefail\n\n\(command)\n"
+        let body = (signing.isEmpty ? [] : signing + ["", "# Create the release"]) + [command]
+        try "#!/bin/bash\nset -euo pipefail\n\n\(body.joined(separator: "\n"))\n"
             .write(to: script, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
 
@@ -339,22 +385,29 @@ struct BuildTool: CommandPlugin {
         return app
     }
 
+    /// Signs the app bundle.
+    ///
+    /// Real signing cannot happen inside the plugin: SwiftPM's plugin sandbox
+    /// blocks keychain access, so `codesign` reports "no identity found" for an
+    /// identity that works perfectly outside it. Verified directly.
+    ///
+    /// So an ad-hoc signature is applied here to produce a runnable bundle, and
+    /// when an identity is given the real signing is emitted as a script to run
+    /// outside the sandbox — the same arrangement as publishing.
     private func sign(_ app: URL, build: BuildEnvironment, options: inout Options) throws {
-        let identity = options.resolvedAppIdentity
-        Log.step("Signing app with \(options.isSigned ? identity : "an ad-hoc signature")")
-
         // --options runtime enables the hardened runtime, which notarization
-        // requires. Unlike the App Store sandbox it does not block the
+        // requires and which, unlike the App Store sandbox, does not block the
         // privileged operations this app performs.
-        var arguments = ["--force", "--sign", identity, "--options", "runtime"]
-        if options.isSigned {
-            arguments += ["--timestamp"]
-        } else {
-            arguments += ["--timestamp=none"]
-        }
-        arguments.append(app.path)
-        try build.run("codesign", arguments, describing: "signing")
+        Log.step("Signing app (ad-hoc)")
+        try build.run(
+            "codesign",
+            ["--force", "--sign", "-", "--options", "runtime", "--timestamp=none", app.path],
+            describing: "ad-hoc signing"
+        )
         try build.run("codesign", ["--verify", "--strict", app.path], describing: "verifying signature")
+
+        guard options.isSigned else { return }
+        Log.detail("real signing", "deferred to build/sign.sh (keychain is unreachable from the plugin sandbox)")
     }
 
     /// Asks the app to emit its own `postinstall`.

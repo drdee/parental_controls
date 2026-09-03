@@ -31,7 +31,35 @@ $99/yr, on a personal Apple Account.
 Note your **Team ID** once approved — a 10-character code, visible at
 <https://developer.apple.com/account> under Membership Details.
 
+It is also in any certificate you already hold, as the `OU` field. Careful:
+the code in the certificate's *name* is a different value.
+
+```bash
+security find-certificate -c "Apple Development: you@example.com (XXXXXXXXXX)" -p \
+  | openssl x509 -noout -subject
+# subject=UID=..., CN=Apple Development: ... (67PF54ZN42), OU=2Q9U7Y5YRD, O=Your Name
+#                                             ^ not the Team ID   ^ Team ID
+```
+
 ## 2. Create the two certificates
+
+> **"Apple Development" is not one of them.** That certificate type is for
+> running your own builds on your own registered devices. Gatekeeper rejects it
+> on anyone else's Mac, and the notary service will not accept it — verified
+> directly: an app signed with `Apple Development: dvanliere@gmail.com` gets
+> `spctl: rejected`.
+>
+> Tell them apart by the issuer:
+>
+> | Certificate | Issued by |
+> |---|---|
+> | Apple Development | Apple Worldwide Developer Relations CA |
+> | **Developer ID** | **Developer ID Certification Authority** |
+>
+> ```bash
+> security find-certificate -c "<cert name>" -p | openssl x509 -noout -issuer
+> ```
+
 
 Distribution outside the App Store needs both:
 
@@ -94,6 +122,12 @@ including the parenthesised Team ID.
 
 The build stops on any failure, so a signing or notarization problem will not
 produce a half-signed release.
+
+**Signing runs outside the plugin.** SwiftPM's plugin sandbox blocks keychain
+access — `codesign` reports "no identity found" for an identity that works
+fine outside it. So the plugin ad-hoc signs to produce a runnable bundle and
+writes the real signing, notarization and publish steps into `build/publish.sh`
+for you to run. Same arrangement as publishing, and for the same reason.
 
 ## 5. Verify before sharing
 
