@@ -33,14 +33,27 @@ public final class AppState {
     private let downloader: (any PackageDownloading)?
     private let resolver: any HostResolving
 
+    /// Records this run for diagnostics. Nil in tests, which pass a runner of
+    /// their own and should not litter the filesystem.
+    public let diagnosticLog: DiagnosticLog?
+
+    /// Set when a newer release exists. Notify-only: nothing is downloaded.
+    public var availableUpdate: AvailableRelease?
+    /// Cleared for the session once the banner is dismissed.
+    public var updateBannerDismissed = false
+
     public init(runner: (any CommandRunning)? = nil,
                 fileSystem: any FileSystemReading = LiveFileSystem(),
                 downloader: (any PackageDownloading)? = nil,
-                resolver: any HostResolving = SystemResolver()) {
+                resolver: any HostResolving = SystemResolver(),
+                diagnosticLog: DiagnosticLog? = nil) {
         self.injectedRunner = runner
         self.fileSystem = fileSystem
         self.downloader = downloader
         self.resolver = resolver
+        // Only the real app logs. A test injecting a runner is exercising
+        // logic, not a session worth recording.
+        self.diagnosticLog = diagnosticLog ?? (runner == nil ? DiagnosticLog() : nil)
     }
 
     // MARK: - Configuration
@@ -124,7 +137,7 @@ public final class AppState {
     // MARK: - Services
 
     private var runner: any CommandRunning {
-        injectedRunner ?? PrivilegedRunner(dryRun: dryRun)
+        injectedRunner ?? PrivilegedRunner(dryRun: dryRun, log: diagnosticLog)
     }
 
     /// Plain-language description of every change, for the dry-run walkthrough.
@@ -179,6 +192,39 @@ public final class AppState {
         hardening.steps(for: mode)
     }
 
+    // MARK: - Diagnostics
+
+    /// Records what was run and on what, so a log read later stands alone.
+    private func logRunHeader() {
+        guard let diagnosticLog else { return }
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        let app = ReleaseVersion.current().map(String.init(describing:)) ?? "unknown"
+
+        diagnosticLog.section("Family Safety run")
+        diagnosticLog.log("app version: \(app)")
+        diagnosticLog.log("macOS: \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)")
+        diagnosticLog.log("mode: \(mode.rawValue)")
+        diagnosticLog.log("preview (dry run): \(dryRun)")
+        diagnosticLog.log("blocked sites: \(effectiveBlockedSites.count)")
+        diagnosticLog.log("install WARP: \(installWARP)")
+        diagnosticLog.log("create account: \(createAccount)")
+    }
+
+    // MARK: - Updates
+
+    /// Looks for a newer release. Silent on every failure; see `UpdateChecker`.
+    ///
+    /// Skipped in preview mode, which exists to show what would happen without
+    /// the app reaching out to anything.
+    public func checkForUpdate(using checker: UpdateChecker = UpdateChecker()) async {
+        guard !dryRun else { return }
+        let found = await checker.checkForUpdate()
+        availableUpdate = found
+        if let found {
+            diagnosticLog?.log("update available: \(found.version)")
+        }
+    }
+
     // MARK: - Apply
 
     public func apply() async {
@@ -186,6 +232,11 @@ public final class AppState {
         runError = nil
         stepResults = []
         defer { isRunning = false }
+
+        // The username is only known now, so the redactor has to be told
+        // before any privileged step can put it in the log.
+        diagnosticLog?.redactor.accountUsername = accountUsername
+        logRunHeader()
 
         let hardening = self.hardening
 
@@ -407,7 +458,7 @@ public final class AppState {
         defer { isReverting = false }
         // Never honour dry-run here: reverting is the safe direction, and a
         // silent no-op would leave someone believing they had undone it.
-        let reverter = Reverter(runner: injectedRunner ?? PrivilegedRunner(dryRun: false),
+        let reverter = Reverter(runner: injectedRunner ?? PrivilegedRunner(dryRun: false, log: diagnosticLog),
                                 fileSystem: fileSystem)
         revertResults = await reverter.revertAll()
         detectedChanges = await reverter.detectApplied()

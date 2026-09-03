@@ -77,6 +77,23 @@ struct RootView: View {
     @Bindable var state: AppState
 
     var body: some View {
+        VStack(spacing: 0) {
+            if let update = state.availableUpdate, !state.updateBannerDismissed {
+                UpdateBanner(release: update) {
+                    state.updateBannerDismissed = true
+                }
+            }
+            stageView
+        }
+        .task {
+            // Fire-and-forget: checkForUpdate swallows every failure, so a
+            // missing network cannot delay or break the first screen.
+            await state.checkForUpdate()
+        }
+    }
+
+    @ViewBuilder
+    private var stageView: some View {
         switch state.stage {
         case .chooseMode: ModeSelectionView(state: state)
         case .configure:  ConfigureView(state: state)
@@ -87,5 +104,36 @@ struct RootView: View {
         case .reverting:     RevertingView()
         case .revertResults: RevertResultsView(state: state)
         }
+    }
+}
+
+/// Tells the user a newer version exists and links to it.
+///
+/// Deliberately a banner rather than a sheet: an update notice must not stand
+/// between someone and the task they opened the app to do.
+struct UpdateBanner: View {
+    let release: AvailableRelease
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.down.circle")
+                .foregroundStyle(.tint)
+            Text("Version \(release.version.description) is available.")
+                .font(.callout)
+            Link("View release", destination: release.pageURL)
+                .font(.callout)
+            Spacer()
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.plain)
+            .help("Dismiss")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.quaternary)
     }
 }

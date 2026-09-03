@@ -298,11 +298,33 @@ the access. This one collects nothing:
 - **No browsing history is collected or read.** The tool sets browser policy;
   it does not inspect what anyone visited.
 
-The app makes exactly **one** kind of outbound connection: downloading the
-Cloudflare WARP installer from `downloads.cloudflareclient.com`, and only in
-Zero Trust mode when you ask for it. That download uses an ephemeral URL
-session, so no cookies or cache persist, and the package's signature is checked
-against Cloudflare's Developer ID before it is allowed to install.
+The app makes **two** kinds of outbound connection, and no others:
+
+1. **An update check on launch** — a single unauthenticated GET to
+   `api.github.com` asking for the latest release tag. It sends no
+   identifying information beyond what any HTTP request carries, and it is
+   notify-only: the app never downloads or installs an update, it just shows
+   a banner linking to the release page. Every failure is silent. Skipped
+   entirely in preview mode.
+2. **The Cloudflare WARP installer**, from `downloads.cloudflareclient.com`,
+   and only in Zero Trust mode when you ask for it. The package's signature is
+   checked against Cloudflare's Developer ID before it is allowed to install.
+
+Both use an ephemeral URL session, so no cookies or cache persist.
+
+### The diagnostic log
+
+Each run writes `~/Library/Logs/FamilySafety/family-safety-<timestamp>.log`,
+and the results screen has a **Reveal Log** button. It records the commands
+run, their exit codes and their output, which is what makes a failed setup
+diagnosable.
+
+It is redacted before anything is written, because a log exists to be shared
+and must not be what leaks a credential. Removed: any line containing a
+password or token, the entire contents of privileged scripts, and the account
+username. The rules are in `DiagnosticLog.Redactor` and there are tests
+asserting a known secret never reaches the file. Nothing is uploaded — the
+file stays on the Mac until you send it somewhere.
 
 Two things do involve third parties once configured, and they are worth
 understanding:

@@ -46,6 +46,14 @@ struct ResultsView: View {
                             .disabled(state.isVerifying)
                     }
                     Spacer()
+                    // Offered here because this is where someone stands when
+                    // something did not work and they need to send evidence.
+                    if let log = state.diagnosticLog {
+                        Button("Reveal Log") {
+                            NSWorkspace.shared.activateFileViewerSelecting([log.fileURL])
+                        }
+                        .help("Show the diagnostic log for this run in Finder")
+                    }
                     Button("Done") { NSApplication.shared.terminate(nil) }
                         .buttonStyle(.borderedProminent)
                 }

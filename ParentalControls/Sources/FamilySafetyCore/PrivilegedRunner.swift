@@ -7,6 +7,13 @@ public struct CommandResult: Sendable {
     public var stdout: String
     public var stderr: String
 
+    public init(command: String, exitCode: Int32, stdout: String, stderr: String) {
+        self.command = command
+        self.exitCode = exitCode
+        self.stdout = stdout
+        self.stderr = stderr
+    }
+
     public var succeeded: Bool { exitCode == 0 }
 
     /// Whatever the command actually said, preferring stdout.
@@ -41,12 +48,20 @@ public enum RunnerError: LocalizedError {
 /// once per machine — a persistent root helper is a larger attack surface than
 /// the job justifies.
 public struct PrivilegedRunner: CommandRunning {
-    public init(dryRun: Bool = false) {
+    public init(dryRun: Bool = false, log: DiagnosticLog? = nil) {
         self.dryRun = dryRun
+        self.log = log
     }
 
     /// Set to true to log commands without executing anything that mutates.
     public var dryRun: Bool = false
+
+    /// Records every command and its output when set.
+    ///
+    /// Attached here rather than at the call sites because this type is the
+    /// one place all shell execution passes through, so nothing can be run
+    /// without appearing in the log. The log redacts before writing.
+    public var log: DiagnosticLog?
 
     // MARK: - Unprivileged
 
@@ -72,12 +87,14 @@ public struct PrivilegedRunner: CommandRunning {
         let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
 
-        return CommandResult(
+        let result = CommandResult(
             command: ([executable] + arguments).joined(separator: " "),
             exitCode: process.terminationStatus,
             stdout: String(decoding: outData),
             stderr: String(decoding: errData)
         )
+        log?.record(result)
+        return result
     }
 
     /// Convenience for read-only probes where failure is informative, not fatal.
@@ -98,6 +115,12 @@ public struct PrivilegedRunner: CommandRunning {
             return CommandResult(command: "[dry-run] \(description)", exitCode: 0,
                                  stdout: script, stderr: "")
         }
+
+        // Logged by description only. The wrapped form passed to osascript
+        // contains the whole script, and run() below would otherwise record it
+        // verbatim — the redactor catches that line, but naming the step here
+        // keeps the log readable instead of a row of redaction markers.
+        log?.log("privileged step: \(description)")
 
         let wrapped = "do shell script \(Self.appleScriptLiteral(script)) with administrator privileges"
         let result = try run("/usr/bin/osascript", ["-e", wrapped])
