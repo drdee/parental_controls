@@ -23,6 +23,8 @@ and find most of this list.
 | 10 | Recovery Mode | **Yes** (if not admin) | Apple Silicon Recovery needs an admin/Owner password. FileVault is essential. |
 | 11 | Boot from USB | **Yes** (if not admin) | Needs an Owner credential; FileVault makes the internal disk unreadable. |
 | 12 | Tor Browser | **No** | Self-contained, runs from a home folder. A copy from a USB stick defeats everything. |
+| 13 | Terminal (`curl`, `python -m http.server`, download a browser) | **No** | No profile key exists — verified against Apple's `com.apple.applicationaccess` schema, which has nothing for Terminal or command-line access. Screen Time cannot disable it either, only time-limit it. DNS still applies to `curl`, so this is about *fetching* rather than a clean bypass. The real exposure is downloading a browser to `~/`, which is #2. |
+| 14 | Spotlight web preview | **Yes** | ⌘-Space, type a URL, Enter — the page loads in Spotlight's own preview window, outside any browser, so browser policy does not apply. `allowSpotlightInternetResults=false` turns it off. DNS filtering catches it regardless, since the lookup is ordinary. |
 
 ## A deliberate gap: self-promotion to admin
 

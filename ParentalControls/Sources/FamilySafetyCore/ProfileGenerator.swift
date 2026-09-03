@@ -56,6 +56,7 @@ public struct ProfileGenerator {
             "PayloadContent": [
                 dnsPayload(),
                 restrictionsPayload(),
+                contentFilterPayload(),
                 appStorePayload(),
                 softwareUpdatePayload(),
                 mcxPayload(),
@@ -140,6 +141,15 @@ public struct ProfileGenerator {
         // Content & Privacy settings — see docs/MANUAL-STEPS.md.
         payload["allowLocalUserCreation"] = false
         payload["allowStartupDiskModification"] = false
+        // Spotlight will load a URL typed into it in its own preview window,
+        // outside any browser, so none of the browser policy below applies to
+        // it. DNS filtering still does, since the lookup is ordinary, but the
+        // window is a genuine gap in the browser layer.
+        //
+        // Not supervision-gated: Apple's com.apple.applicationaccess schema
+        // marks this key `supervised: false` with no `allowmanualinstall`
+        // restriction, unlike allowDefinitionLookup next to it.
+        payload["allowSpotlightInternetResults"] = false
         // allowAccountModification is deliberately absent. It would stop a
         // standard user promoting themselves to admin, but it also blocks
         // every legitimate account change -- including an ordinary password
@@ -194,6 +204,50 @@ public struct ProfileGenerator {
         payload["DisableGuestAccount"] = true
         // Stops this Mac sharing its connection onward to other devices.
         payload["forceInternetSharingOff"] = true
+        return payload
+    }
+
+    /// The legacy Family Controls web filter.
+    ///
+    /// This is the one payload that reaches **Safari**. Every Chromium browser
+    /// and Firefox has its own policy payload; Safari had nothing but DNS
+    /// until this, because WebKit ignores those policies entirely.
+    ///
+    /// Not to be confused with `com.apple.webcontent-filter`, which is a
+    /// different payload and is deliberately skipped — see the note below it.
+    /// This one should be usable on a manually installed profile: Apple's
+    /// schema marks it `supervised: false` and `allowmanualinstall: true`.
+    ///
+    /// One caveat worth knowing when changing this: schema conformance has
+    /// been a poor predictor of what macOS accepts. `allowSafariPrivateBrowsing`
+    /// and the `webcontent-filter` payload both looked installable on paper
+    /// and failed the *entire* profile with "CPDomainPlugin:101". A profile
+    /// installs whole or not at all, so a rejected payload takes everything
+    /// else with it — install after any change here, do not assume.
+    ///
+    /// `useContentFilter` turns on Apple's own heuristic adult-content
+    /// classifier, which catches sites no hand-written list would. The deny
+    /// list then adds the specific domains this tool blocks, so the two work
+    /// together rather than either alone.
+    ///
+    /// `allowListEnabled` is deliberately left false. Setting it restricts
+    /// browsing to `siteAllowList` only, which is a different product — fine
+    /// for a six-year-old, unusable for a teenager doing homework.
+    private func contentFilterPayload() -> [String: Any] {
+        var payload = base("com.apple.familycontrols.contentfilter",
+                           "contentfilter", "Web Content Filter")
+        payload["restrictWeb"] = true
+        payload["useContentFilter"] = true
+
+        let denied = blockedSites.flatMap { site in
+            ([site.domain] + site.extraHosts).map { "https://\($0)" }
+        }
+        // Apple renamed these keys in macOS 15.2 and deprecated the old
+        // spellings. Both are emitted: the deployment target is macOS 14, and
+        // an unrecognised key in this payload is ignored rather than failing
+        // the install.
+        payload["filterDenyList"] = denied
+        payload["filterBlacklist"] = denied
         return payload
     }
 

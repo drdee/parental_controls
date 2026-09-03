@@ -152,6 +152,7 @@ struct ProfileGeneratorTests {
         let applePayloads = [
             "com.apple.dnsSettings.managed",
             "com.apple.applicationaccess",
+            "com.apple.familycontrols.contentfilter",
             "com.apple.appstore",
             "com.apple.SoftwareUpdate",
             "com.apple.MCX",
@@ -161,6 +162,38 @@ struct ProfileGeneratorTests {
 
         #expect(Set(byType.keys) == expected,
                 "payload set changed; confirm the new payload installs without MDM")
+    }
+
+    /// The only payload that reaches Safari. Chromium and Firefox each have
+    /// their own policy payload; WebKit honours neither.
+    @Test("The content filter blocks the configured sites and enables Apple's classifier")
+    func contentFilterPayload() throws {
+        let (_, byType) = try payloads(ProfileGenerator(blockedSites: standardSites))
+        let filter = byType["com.apple.familycontrols.contentfilter"]!
+
+        #expect(filter["restrictWeb"] as? Bool == true)
+        #expect(filter["useContentFilter"] as? Bool == true)
+
+        // allowListEnabled would restrict browsing to an allow list only,
+        // which is a different product. Absent means "filter, do not whitelist".
+        #expect(filter["allowListEnabled"] == nil)
+
+        // Apple renamed the key in macOS 15.2; both spellings are emitted
+        // because the deployment target is macOS 14.
+        let denyList = filter["filterDenyList"] as! [String]
+        let legacy = filter["filterBlacklist"] as! [String]
+        #expect(denyList == legacy, "the two spellings must stay in step")
+        #expect(denyList.contains { $0.contains("chat.openai.com") },
+                "alternate hosts belong in the deny list too")
+    }
+
+    @Test("Spotlight's web preview is turned off")
+    func spotlightInternetResultsBlocked() throws {
+        let (_, byType) = try payloads(ProfileGenerator(blockedSites: standardSites))
+        let access = byType["com.apple.applicationaccess"]!
+        // Spotlight loads a typed URL in its own preview window, outside any
+        // browser, so no browser policy applies to it.
+        #expect(access["allowSpotlightInternetResults"] as? Bool == false)
     }
 
     /// `com.apple.webcontent-filter` is not emitted.

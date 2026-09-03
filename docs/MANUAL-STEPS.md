@@ -68,3 +68,15 @@ Especially if you used Advanced Mode:
    - remove the profile in Device Management
 3. Confirm they **can** still do schoolwork: Google Docs, school sites,
    printing, Messages.
+
+4. **Check the profile actually installed.** It should appear in System
+   Settings › General › Device Management, and:
+
+   ```bash
+   profiles list -type configuration
+   ```
+
+   A profile either installs whole or not at all. If one payload is rejected
+   the entire thing fails with `unexpected error CPDomainPlugin:101` and
+   nothing is applied — so "the profile is listed" is the check that every
+   payload was accepted.
