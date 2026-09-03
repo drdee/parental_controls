@@ -12,6 +12,24 @@
 A native macOS app that configures content filtering and device restrictions on
 a Mac. Designed so the safe subset can be handed to other families.
 
+## See it in action
+
+**[Watch the walkthrough (54s, 733 KB)](https://github.com/drdee/parental_controls/releases/download/v1.0.9/family-safety-preview.mov)**
+— the whole setup in **preview mode**, captioned at each step.
+
+Preview mode walks through everything and shows exactly what would change, in
+plain language, without modifying anything: no profile saved, no settings
+altered, no account created. It is worth using before a real run, and it is
+what the video shows:
+
+| | |
+|---|---|
+| **Choose a mode** | Family Mode is content filtering only and fully reversible; Advanced adds a standard account and login hardening |
+| **Configure** | Preflight checks on this Mac, DNS provider, safe search, which categories to block |
+| **Review** | Every change as a card: what it does, what they will notice, how to undo it |
+| **Apply** | Simulated in preview; a real run asks for an administrator password once |
+| **Results** | What would have happened, plus what still needs doing by hand |
+
 **Requires macOS 14 Sonoma or later.** Tested on macOS 15 Sequoia and macOS 26
 Tahoe, Apple Silicon and Intel. A few restrictions need macOS 15 or later and
 are simply ignored below that — the app says so in its preflight checks rather
